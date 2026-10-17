@@ -10,12 +10,7 @@ Containerized and ready to run.
 Tuxcrate packages open-source applications as container images.
 Find an image, check its runtime requirements, and choose a release tag for your deployment.
 
-## Container images
-
-The [container image catalog](containers/index.md) lists published versions, release tracks, immutable image revisions, and all current GHCR tags.
-
-Each image page explains how to run the application and what its tags mean.
-Check the configuration and host requirements before starting a container.
+[Browse all container images](containers/){ .md-button .md-button--primary }
 
 ## Found a bug?
 
