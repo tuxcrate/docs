@@ -1,3 +1,8 @@
+"""Exercise container metadata, rendering, and network safeguards."""
+
+# These tests intentionally use unittest assertions and subtests together.
+# ruff: noqa: PT009, PT027
+
 import copy
 import json
 import os
@@ -18,55 +23,93 @@ IMAGE = SNAPSHOT["images"][0]
 REPOSITORY = "tuxcrate/zrepl"
 
 
-def template_environment():
+def template_environment() -> Environment:
+    """Create the Markdown template environment used by the website."""
     root = Path(__file__).resolve().parents[2]
-    env = Environment(loader=FileSystemLoader(root / "templates"), undefined=StrictUndefined)
-    env.filters.update(cell=main.cell, docker_run=main.docker_run, compose_yaml=main.compose_yaml)
+    # Markdown templates escape their individual table values, not the whole page.
+    env = Environment(
+        loader=FileSystemLoader(root / "templates"),
+        undefined=StrictUndefined,
+        autoescape=False,  # noqa: S701 -- Markdown values are escaped individually.
+    )
+    env.filters.update(
+        cell=main.cell, docker_run=main.docker_run, compose_yaml=main.compose_yaml
+    )
     env.globals["gh_image_versions_data"] = main.gh_image_versions_data
     return env
 
 
-def render_versions(item):
+def render_versions(item: main.Metadata) -> str:
     """Exercise the real template with a controlled registry snapshot."""
     env = template_environment()
-    container = {"repository": item["repository"], "upstream": "https://example.com",
-                 "description": "Test image", "docker_run": [item["image"] + ":latest"],
-                 "compose": {"services": {"app": {"image": item["image"] + ":latest"}}}}
-    with patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": ""}), \
-            patch("macros.main.collect", return_value=item):
+    container = {
+        "repository": item["repository"],
+        "upstream": "https://example.com",
+        "description": "Test image",
+        "docker_run": [item["image"] + ":latest"],
+        "compose": {"services": {"app": {"image": item["image"] + ":latest"}}},
+    }
+    with (
+        patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": ""}),
+        patch("macros.main.collect", return_value=item),
+    ):
         return env.get_template("container.md.jinja").render(
-            page={"meta": {"title": "Test image", "container": container}})
+            page={"meta": {"title": "Test image", "container": container}}
+        )
 
 
 class MacroTests(unittest.TestCase):
-    def test_registration(self):
+    """Check macro registration, version selection, and escaping."""
+
+    def test_registration(self) -> None:
+        """Register the macro and all three rendering filters."""
         env = Mock()
         main.define_env(env)
-        self.assertEqual(env.macro.call_args_list,
-                         [unittest.mock.call(main.gh_image_versions_data)])
-        self.assertEqual(env.filter.call_args_list,
-                         [unittest.mock.call(main.cell), unittest.mock.call(main.docker_run),
-                          unittest.mock.call(main.compose_yaml)])
+        self.assertEqual(
+            env.macro.call_args_list, [unittest.mock.call(main.gh_image_versions_data)]
+        )
+        self.assertEqual(
+            env.filter.call_args_list,
+            [
+                unittest.mock.call(main.cell),
+                unittest.mock.call(main.docker_run),
+                unittest.mock.call(main.compose_yaml),
+            ],
+        )
 
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": str(FIXTURE)})
-    @patch("macros.main.request", side_effect=AssertionError("Offline preview used the network"))
-    def test_offline_preview_and_short_name(self, request):
+    @patch(
+        "macros.main.request",
+        side_effect=AssertionError("Offline preview used the network"),
+    )
+    def test_offline_preview_and_short_name(self, request: Mock) -> None:
+        """Resolve short names using fixtures without making network requests."""
         data = main.gh_image_versions_data("zrepl")
         self.assertEqual(data, main.gh_image_versions_data(REPOSITORY))
         self.assertTrue(data["preview"])
         self.assertEqual(data["image"], IMAGE["image"])
-        self.assertEqual([release["track"] for release in data["releases"]], ["preview", "stable"])
+        self.assertEqual(
+            [release["track"] for release in data["releases"]], ["preview", "stable"]
+        )
         self.assertNotIn("markdown", data)
         request.assert_not_called()
 
-    def test_invalid_repository(self):
-        for name in ("../secret", "owner/name/extra", "https://example.com/repo", "Zrepl", ""):
+    def test_invalid_repository(self) -> None:
+        """Reject malformed repository names before fetching data."""
+        for name in (
+            "../secret",
+            "owner/name/extra",
+            "https://example.com/repo",
+            "Zrepl",
+            "",
+        ):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 main.gh_image_versions_data(name)
 
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": ""})
     @patch("macros.main.collect")
-    def test_default_tag_matches_first_verified_release(self, collect):
+    def test_default_tag_matches_first_verified_release(self, collect: Mock) -> None:
+        """Select the newest verified tag or fall back to latest."""
         item = copy.deepcopy(IMAGE)
         for expected in ("2.0.0-rc.1-r0", "1.2.3-r1", "latest"):
             with self.subTest(expected=expected):
@@ -76,8 +119,10 @@ class MacroTests(unittest.TestCase):
                 collect.assert_called_once_with(REPOSITORY)
                 if expected != "latest":
                     self.assertEqual(versions["releases"][0]["immutableTag"], expected)
-                    self.assertIn(f'data-container-tag="{expected}" aria-pressed="true"',
-                                  render_versions(item))
+                    self.assertIn(
+                        f'data-container-tag="{expected}" aria-pressed="true"',
+                        render_versions(item),
+                    )
                     del item["tags"][expected]
                 else:
                     self.assertEqual(versions["releases"], [])
@@ -87,7 +132,8 @@ class MacroTests(unittest.TestCase):
 
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": ""})
     @patch("macros.main.collect")
-    def test_live_macro(self, collect):
+    def test_live_macro(self, collect: Mock) -> None:
+        """Use collected live data when no preview fixture is configured."""
         collect.return_value = IMAGE
         data = main.gh_image_versions_data("zrepl")
         collect.assert_called_once_with(REPOSITORY)
@@ -95,19 +141,29 @@ class MacroTests(unittest.TestCase):
         self.assertEqual(len(data["releases"]), 2)
 
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": ""})
-    @patch("macros.main.collect", side_effect=HTTPError("https://ghcr.io/token", 403, "Forbidden", {}, None))
-    def test_fetch_failure_propagates(self, collect):
+    @patch(
+        "macros.main.collect",
+        side_effect=HTTPError("https://ghcr.io/token", 403, "Forbidden", {}, None),
+    )
+    def test_fetch_failure_propagates(self, collect: Mock) -> None:
+        """Surface upstream failures instead of rendering incomplete data."""
         with self.assertRaises(HTTPError):
             main.gh_image_versions_data("zrepl")
+        collect.assert_called_once_with(REPOSITORY)
 
-    def test_only_current_matching_aliases_are_shown(self):
+    def test_only_current_matching_aliases_are_shown(self) -> None:
+        """Show aliases only beside the digest they currently reference."""
         item = copy.deepcopy(IMAGE)
         item["tags"]["latest"] = IMAGE["releases"][0]["digest"]
         del item["tags"]["stable"]
         item["tags"]["custom"] = IMAGE["releases"][1]["digest"]
         text = render_versions(item)
-        stable = next(line for line in text.splitlines() if line.startswith("| stable |"))
-        preview = next(line for line in text.splitlines() if line.startswith("| preview |"))
+        stable = next(
+            line for line in text.splitlines() if line.startswith("| stable |")
+        )
+        preview = next(
+            line for line in text.splitlines() if line.startswith("| preview |")
+        )
         self.assertIn("<code>1.2.3-r1</code>", stable)
         self.assertIn("<code>custom</code>", stable)
         self.assertNotIn("<code>stable</code>", text)
@@ -115,10 +171,16 @@ class MacroTests(unittest.TestCase):
         self.assertIn("<code>latest</code>", preview)
         self.assertNotIn("<code>manual</code>", text)
 
-    def test_all_verified_revisions_are_listed_newest_first(self):
+    def test_all_verified_revisions_are_listed_newest_first(self) -> None:
+        """Order every verified revision by publication time."""
         item = copy.deepcopy(IMAGE)
-        older = {**item["releases"][1], "immutableTag": "1.2.3-r0", "revision": 0,
-                 "releaseTag": "v1.2.3-r0", "publishedAt": "2026-10-15T11:00:00Z"}
+        older = {
+            **item["releases"][1],
+            "immutableTag": "1.2.3-r0",
+            "revision": 0,
+            "releaseTag": "v1.2.3-r0",
+            "publishedAt": "2026-10-15T11:00:00Z",
+        }
         item["releases"].insert(0, older)  # Selection must not depend on input order.
         item["tags"][older["immutableTag"]] = older["digest"]
         text = render_versions(item)
@@ -131,25 +193,33 @@ class MacroTests(unittest.TestCase):
         self.assertLess(text.index("/tag/v1.2.3-r1"), text.index("/tag/v1.2.3-r0"))
         self.assertNotIn("container-versions-more", text)
 
-    def test_list_more_only_when_there_are_more_than_three_releases(self):
+    def test_list_more_only_when_there_are_more_than_three_releases(self) -> None:
+        """Render pagination controls only when releases exceed one page."""
         item = copy.deepcopy(IMAGE)
         for revision in range(4):
-            release = {**IMAGE["releases"][1], "immutableTag": f"1.0.{revision}-r0",
-                       "releaseTag": f"v1.0.{revision}-r0", "version": f"1.0.{revision}",
-                       "publishedAt": f"2026-10-1{revision}T11:00:00Z"}
+            release = {
+                **IMAGE["releases"][1],
+                "immutableTag": f"1.0.{revision}-r0",
+                "releaseTag": f"v1.0.{revision}-r0",
+                "version": f"1.0.{revision}",
+                "publishedAt": f"2026-10-1{revision}T11:00:00Z",
+            }
             item["releases"].append(release)
             item["tags"][release["immutableTag"]] = release["digest"]
         text = render_versions(item)
         self.assertIn('data-page-size="3"', text)
         self.assertIn('data-load-size="5"', text)
-        self.assertIn('class="md-button container-versions-more" hidden>List more</button>', text)
+        self.assertIn(
+            'class="md-button container-versions-more" hidden>List more</button>', text
+        )
         self.assertEqual(text.count("| stable |"), 5)
         self.assertEqual(text.count("| preview |"), 1)
         # All rows are present for no-JavaScript access; JavaScript paginates them.
         self.assertIn("/tag/v1.0.0-r0", text)
         self.assertNotIn("container-versions-more", render_versions(IMAGE))
 
-    def test_revision_tags_must_match_registry_digest(self):
+    def test_revision_tags_must_match_registry_digest(self) -> None:
+        """Hide release rows with missing or mismatched registry tags."""
         for digest in (None, IMAGE["releases"][0]["digest"]):
             with self.subTest(digest=digest):
                 item = copy.deepcopy(IMAGE)
@@ -162,113 +232,206 @@ class MacroTests(unittest.TestCase):
                 self.assertNotIn("| stable |", text)
                 self.assertIn("| preview |", text)
 
-    def test_tag_buttons_and_published_release_links(self):
+    def test_tag_buttons_and_published_release_links(self) -> None:
+        """Render ordered tag buttons and links to their published releases."""
         text = render_versions(IMAGE)
         self.assertNotIn("Image: ", text)
         self.assertNotIn("Last refreshed:", text)
         self.assertNotIn("build-time snapshot", text)
-        self.assertIn("[2026-10-16 11:00]"
-                      "(https://github.com/tuxcrate/zrepl/releases/tag/v1.2.3-r1)", text)
-        stable = next(line for line in text.splitlines() if line.startswith("| stable |"))
+        self.assertIn(
+            "[2026-10-16 11:00]"
+            "(https://github.com/tuxcrate/zrepl/releases/tag/v1.2.3-r1)",
+            text,
+        )
+        stable = next(
+            line for line in text.splitlines() if line.startswith("| stable |")
+        )
         tags = ["1.2.3-r1", "1.2.3", "1.2", "latest", "stable"]
         positions = [stable.index(f'data-container-tag="{tag}"') for tag in tags]
         self.assertEqual(positions, sorted(positions))
         self.assertEqual(stable.count('type="button"'), len(tags))
-        self.assertEqual(stable.count('data-container-image="ghcr.io/tuxcrate/zrepl"'), len(tags))
+        self.assertEqual(
+            stable.count('data-container-image="ghcr.io/tuxcrate/zrepl"'), len(tags)
+        )
         self.assertIn('data-container-tag="latest" aria-pressed="false"', stable)
         self.assertIn('data-container-tag="1.2.3-r1" aria-pressed="false"', stable)
         self.assertEqual(text.count('aria-pressed="true"'), 1)
         self.assertIn('data-container-tag="2.0.0-rc.1-r0" aria-pressed="true"', text)
         self.assertNotIn("[GHCR]", text)
 
-    def test_escaping_and_empty_image(self):
-        self.assertEqual(main.cell('<script>|`[x]\n'), '&lt;script&gt;&#124;&#96;&#91;x&#93; ')
+    def test_escaping_and_empty_image(self) -> None:
+        """Escape table delimiters and render a clear empty-image message."""
+        self.assertEqual(
+            main.cell("<script>|`[x]\n"), "&lt;script&gt;&#124;&#96;&#91;x&#93; "
+        )
         item = {**IMAGE, "tags": {}, "releases": [], "legacyReleases": []}
         text = render_versions(item)
-        self.assertIn("No published images with matching release metadata are available yet", text)
+        self.assertIn(
+            "No published images with matching release metadata are available yet", text
+        )
         self.assertNotIn("| Track |", text)
 
-    def test_template_escapes_table_values(self):
+    def test_template_escapes_table_values(self) -> None:
+        """Prevent release metadata from injecting HTML or table syntax."""
         item = copy.deepcopy(IMAGE)
-        item["releases"][0]["track"] = '<script>|`[x]\n'
+        item["releases"][0]["track"] = "<script>|`[x]\n"
         item["releases"][0]["version"] = '<img src=x onerror="alert(1)">'
         text = render_versions(item)
-        self.assertIn('&lt;script&gt;&#124;&#96;&#91;x&#93; ', text)
-        self.assertIn('<code>&lt;img src=x onerror=&quot;alert(1)&quot;&gt;</code>', text)
-        self.assertNotIn('<script>', text)
-        self.assertNotIn('<img ', text)
+        self.assertIn("&lt;script&gt;&#124;&#96;&#91;x&#93; ", text)
+        self.assertIn(
+            "<code>&lt;img src=x onerror=&quot;alert(1)&quot;&gt;</code>", text
+        )
+        self.assertNotIn("<script>", text)
+        self.assertNotIn("<img ", text)
 
 
 class ContainerTemplateTests(unittest.TestCase):
-    def test_docker_run_preserves_shell_fragments(self):
-        arguments = ["--rm", '--user "$(id -u):$(id -g)"',
-                     '--mount "type=bind,src=$PWD/downloads,dst=/downloads"',
-                     "ghcr.io/tuxcrate/gallery-dl:latest", "'https://example.com/gallery'"]
-        self.assertEqual(main.docker_run(arguments),
-                         "docker run \\\n  " + " \\\n  ".join(arguments))
+    """Check shared container layouts and command rendering."""
 
-    def test_invalid_docker_run(self):
-        for arguments in (None, "--rm", [], [1], [""], [" "], ["--rm\nwhoami"], ["--rm\r"]):
+    def test_docker_run_preserves_shell_fragments(self) -> None:
+        """Keep shell quoting and expansions unchanged in CLI examples."""
+        arguments = [
+            "--rm",
+            '--user "$(id -u):$(id -g)"',
+            '--mount "type=bind,src=$PWD/downloads,dst=/downloads"',
+            "ghcr.io/tuxcrate/gallery-dl:latest",
+            "'https://example.com/gallery'",
+        ]
+        self.assertEqual(
+            main.docker_run(arguments), "docker run \\\n  " + " \\\n  ".join(arguments)
+        )
+
+    def test_invalid_docker_run(self) -> None:
+        """Reject empty, non-string, and multiline shell fragments."""
+        for arguments in (
+            None,
+            "--rm",
+            [],
+            [1],
+            [""],
+            [" "],
+            ["--rm\nwhoami"],
+            ["--rm\r"],
+        ):
             with self.subTest(arguments=arguments), self.assertRaises(ValueError):
                 main.docker_run(arguments)
 
-    def test_compose_round_trip_and_order(self):
-        configuration = {"services": {"app": {"image": "ghcr.io/tuxcrate/app:latest",
-                         "user": "${UID}:${GID}", "restart": "no", "ports": ["8080:80"],
-                         "command": ["https://example.com/gallery"]}}}
+    def test_compose_round_trip_and_order(self) -> None:
+        """Preserve Compose values while ordering common service properties."""
+        configuration = {
+            "services": {
+                "app": {
+                    "image": "ghcr.io/tuxcrate/app:latest",
+                    "user": "${UID}:${GID}",
+                    "restart": "no",
+                    "ports": ["8080:80"],
+                    "command": ["https://example.com/gallery"],
+                }
+            }
+        }
         text = main.compose_yaml(configuration)
         self.assertEqual(yaml.safe_load(text), configuration)
         self.assertLess(text.index("image:"), text.index("user:"))
         self.assertLess(text.index("user:"), text.index("restart:"))
         self.assertNotIn("{", text.replace("${UID}:${GID}", ""))
 
-    def test_compose_service_property_order(self):
-        keys = ["image", "build", "container_name", "hostname", "user", "restart", "init",
-                "entrypoint", "command", "working_dir", "environment", "env_file", "ports",
-                "expose", "volumes", "devices", "networks", "depends_on", "healthcheck"]
-        configuration = {"services": {
-            "app": {key: key for key in reversed(keys)},
-            "worker": {"command": ["work"], "restart": "no", "image": "worker:latest"},
-        }}
+    def test_compose_service_property_order(self) -> None:
+        """Apply the shared property order independently to each service."""
+        keys = [
+            "image",
+            "build",
+            "container_name",
+            "hostname",
+            "user",
+            "restart",
+            "init",
+            "entrypoint",
+            "command",
+            "working_dir",
+            "environment",
+            "env_file",
+            "ports",
+            "expose",
+            "volumes",
+            "devices",
+            "networks",
+            "depends_on",
+            "healthcheck",
+        ]
+        configuration = {
+            "services": {
+                "app": {key: key for key in reversed(keys)},
+                "worker": {
+                    "command": ["work"],
+                    "restart": "no",
+                    "image": "worker:latest",
+                },
+            }
+        }
         rendered = yaml.safe_load(main.compose_yaml(configuration))
         self.assertEqual(rendered, configuration)
         self.assertEqual(list(rendered["services"]), ["app", "worker"])
         self.assertEqual(list(rendered["services"]["app"]), keys)
-        self.assertEqual(list(rendered["services"]["worker"]), ["image", "restart", "command"])
+        self.assertEqual(
+            list(rendered["services"]["worker"]), ["image", "restart", "command"]
+        )
 
-    def test_compose_preserves_unknown_properties_nested_order_and_input(self):
-        configuration = {"name": "example", "services": {"app": {
-            "x-custom": {"z": 1, "a": 2},
-            "environment": {"Z_VAR": "last", "A_VAR": "first"},
-            "volumes": ["./z:/z", "./a:/a"],
-            "command": ["serve", "--verbose"],
-            "read_only": True,
-            "image": "app:latest",
-        }}, "volumes": {"z": {}, "a": {}}}
+    def test_compose_preserves_unknown_properties_nested_order_and_input(self) -> None:
+        """Preserve extension properties, nested order, and the original input."""
+        configuration = {
+            "name": "example",
+            "services": {
+                "app": {
+                    "x-custom": {"z": 1, "a": 2},
+                    "environment": {"Z_VAR": "last", "A_VAR": "first"},
+                    "volumes": ["./z:/z", "./a:/a"],
+                    "command": ["serve", "--verbose"],
+                    "read_only": True,
+                    "image": "app:latest",
+                }
+            },
+            "volumes": {"z": {}, "a": {}},
+        }
         before = yaml.safe_dump(configuration, sort_keys=False)
         rendered = yaml.safe_load(main.compose_yaml(configuration))
         service = rendered["services"]["app"]
         self.assertEqual(rendered, configuration)
         self.assertEqual(list(rendered), ["name", "services", "volumes"])
-        self.assertEqual(list(service),
-                         ["image", "command", "environment", "volumes", "x-custom", "read_only"])
+        self.assertEqual(
+            list(service),
+            ["image", "command", "environment", "volumes", "x-custom", "read_only"],
+        )
         self.assertEqual(list(service["environment"]), ["Z_VAR", "A_VAR"])
         self.assertEqual(list(service["x-custom"]), ["z", "a"])
         self.assertEqual(list(rendered["volumes"]), ["z", "a"])
         self.assertEqual(yaml.safe_dump(configuration, sort_keys=False), before)
 
-    def test_invalid_compose(self):
+    def test_invalid_compose(self) -> None:
+        """Reject Compose data without a valid services mapping."""
         for configuration in (None, [], "services: {}", {}, {"services": []}):
-            with self.subTest(configuration=configuration), self.assertRaises(ValueError):
+            with (
+                self.subTest(configuration=configuration),
+                self.assertRaises(ValueError),
+            ):
                 main.compose_yaml(configuration)
 
-    def test_container_pages_use_shared_layout(self):
+    def test_container_pages_use_shared_layout(self) -> None:
+        """Render both container pages through the shared usage layout."""
         root = Path(__file__).resolve().parents[2]
         env = template_environment()
-        versions = Mock(return_value={"image": IMAGE["image"], "preview": False,
-                                      "releases": [{**IMAGE["releases"][1],
-                                                    "immutableTag": "0.7.0-r5",
-                                                    "tags": ["0.7.0-r5"]}]})
+        versions = Mock(
+            return_value={
+                "image": IMAGE["image"],
+                "preview": False,
+                "releases": [
+                    {
+                        **IMAGE["releases"][1],
+                        "immutableTag": "0.7.0-r5",
+                        "tags": ["0.7.0-r5"],
+                    }
+                ],
+            }
+        )
         env.globals["gh_image_versions_data"] = versions
         for name in ("gallery-dl", "zrepl"):
             with self.subTest(name=name):
@@ -276,7 +439,9 @@ class ContainerTemplateTests(unittest.TestCase):
                 source = (root / "docs/containers" / f"{name}.md").read_text()
                 _, front_matter, body = source.split("---", 2)
                 metadata = yaml.safe_load(front_matter)
-                versions.return_value["image"] = "ghcr.io/" + metadata["container"]["repository"]
+                versions.return_value["image"] = (
+                    "ghcr.io/" + metadata["container"]["repository"]
+                )
                 text = env.from_string(body).render(page={"meta": metadata})
                 self.assertIn(f"# {name}", text)
                 self.assertIn(f'!!! info "About {name}"', text)
@@ -290,9 +455,14 @@ class ContainerTemplateTests(unittest.TestCase):
                 self.assertIn('```yaml linenums="1"', text)
                 self.assertIn("    docker run \\", text)
                 self.assertIn("    services:", text)
-                self.assertIn(f'<div class="container-usage" data-container-image="ghcr.io/'
-                              f'{metadata["container"]["repository"]}" markdown="1">', text)
-                self.assertLess(text.index("## Published versions"), text.index("## Usage"))
+                self.assertIn(
+                    f'<div class="container-usage" data-container-image="ghcr.io/'
+                    f'{metadata["container"]["repository"]}" markdown="1">',
+                    text,
+                )
+                self.assertLess(
+                    text.index("## Published versions"), text.index("## Usage")
+                )
                 versions.assert_called_once_with(f"tuxcrate/{name}")
                 self.assertEqual(text.count(f"ghcr.io/tuxcrate/{name}:0.7.0-r5"), 2)
                 self.assertNotIn(f"ghcr.io/tuxcrate/{name}:latest", text)
@@ -300,26 +470,42 @@ class ContainerTemplateTests(unittest.TestCase):
                 self.assertNotIn("No image has been published yet", text)
                 if name == "zrepl":
                     self.assertIn("--privileged", metadata["container"]["docker_run"])
-                    self.assertIs(metadata["container"]["compose"]["services"]["zrepl"]["privileged"], True)
+                    privileged = metadata["container"]["compose"]["services"]["zrepl"][
+                        "privileged"
+                    ]
+                    self.assertIs(privileged, True)  # noqa: FBT003 -- Verify the boolean type too.
                     self.assertIn("--privileged", text)
                     self.assertIn("privileged: true", text)
 
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": str(FIXTURE)})
-    @patch("macros.main.request", side_effect=AssertionError("Offline preview used the network"))
-    def test_gallery_dl_offline_table(self, request):
+    @patch(
+        "macros.main.request",
+        side_effect=AssertionError("Offline preview used the network"),
+    )
+    def test_gallery_dl_offline_table(self, request: Mock) -> None:
+        """Render gallery-dl fixture versions without network access."""
         root = Path(__file__).resolve().parents[2]
         source = (root / "docs/containers/gallery-dl.md").read_text()
         _, front_matter, body = source.split("---", 2)
-        text = template_environment().from_string(body).render(
-            page={"meta": yaml.safe_load(front_matter)})
+        text = (
+            template_environment()
+            .from_string(body)
+            .render(page={"meta": yaml.safe_load(front_matter)})
+        )
         self.assertIn("fictional test data", text)
         self.assertIn("| Track | Image Tags | App Version | Published |", text)
         self.assertEqual(text.count("ghcr.io/tuxcrate/gallery-dl:1.2.3-r0"), 2)
         request.assert_not_called()
 
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": str(FIXTURE)})
-    @patch("macros.main.request", side_effect=AssertionError("Offline preview used the network"))
-    def test_template_renders_default_revision_without_javascript(self, request):
+    @patch(
+        "macros.main.request",
+        side_effect=AssertionError("Offline preview used the network"),
+    )
+    def test_template_renders_default_revision_without_javascript(
+        self, request: Mock
+    ) -> None:
+        """Include the selected immutable revision in server-rendered examples."""
         root = Path(__file__).resolve().parents[2]
         env = template_environment()
         source = (root / "docs/containers/zrepl.md").read_text()
@@ -339,82 +525,168 @@ class ContainerTemplateTests(unittest.TestCase):
 
 
 class SourceTests(unittest.TestCase):
+    """Check release validation and HTTP credential boundaries."""
+
     @patch("macros.main.build_opener")
-    def test_http_error_includes_source_url(self, opener):
+    def test_reject_non_https_requests(self, opener: Mock) -> None:
+        """Reject unsafe URL schemes before constructing a network opener."""
+        for url in ("http://example.com", "file:///etc/passwd", "ftp://example.com"):
+            with self.subTest(url=url), self.assertRaisesRegex(ValueError, "non-HTTPS"):
+                main.request(url)
+        opener.assert_not_called()
+
+    @patch("macros.main.build_opener")
+    def test_http_error_includes_source_url(self, opener: Mock) -> None:
+        """Include the request URL and HTTP status in upstream failures."""
         opener.return_value.open.side_effect = HTTPError(
-            "https://ghcr.io/token", 403, "Forbidden", {}, None)
-        with self.assertRaisesRegex(RuntimeError, "GET https://ghcr.io/token: HTTP 403"):
+            "https://ghcr.io/token", 403, "Forbidden", {}, None
+        )
+        with self.assertRaisesRegex(
+            RuntimeError, "GET https://ghcr.io/token: HTTP 403"
+        ):
             main.request("https://ghcr.io/token")
 
     @patch.dict(os.environ, {"GH_TOKEN": "github-secret"})
     @patch("macros.main.request")
-    def test_paginated_releases_and_registry_tags(self, request):
-        record = {key: value for key, value in IMAGE["releases"][1].items()
-                  if key not in ("releaseTag", "publishedAt")}
-        release = {"draft": False, "tag_name": "v1.2.3-r1", "published_at": "2026-10-16T11:00:00Z",
-                   "assets": [{"name": "release.json", "browser_download_url":
-                               "https://github.com/tuxcrate/zrepl/releases/download/v1.2.3-r1/release.json"}]}
+    def test_paginated_releases_and_registry_tags(self, request: Mock) -> None:
+        """Follow API pagination without forwarding credentials to assets."""
+        record = {
+            key: value
+            for key, value in IMAGE["releases"][1].items()
+            if key not in ("releaseTag", "publishedAt")
+        }
+        release = {
+            "draft": False,
+            "tag_name": "v1.2.3-r1",
+            "published_at": "2026-10-16T11:00:00Z",
+            "assets": [
+                {
+                    "name": "release.json",
+                    "browser_download_url": "https://github.com/tuxcrate/zrepl/releases/download/v1.2.3-r1/release.json",
+                }
+            ],
+        }
         request.side_effect = [
-            ([{**release, "draft": True}], {"Link": '<https://api.github.com/repos/tuxcrate/zrepl/releases?page=2>; rel="next"'}),
+            (
+                [{**release, "draft": True}],
+                {
+                    "Link": (
+                        "<https://api.github.com/repos/"
+                        "tuxcrate/zrepl/releases?page=2>; "
+                        'rel="next"'
+                    )
+                },
+            ),
             ([release, {**release, "tag_name": "v0.1", "assets": []}], {}),
             (record, {}),
             ({"token": "registry-secret"}, {}),
-            ({"tags": ["latest"]}, {"Link": '</v2/tuxcrate/zrepl/tags/list?last=latest>; rel="next"'}),
+            (
+                {"tags": ["latest"]},
+                {"Link": '</v2/tuxcrate/zrepl/tags/list?last=latest>; rel="next"'},
+            ),
             (None, {"Docker-Content-Digest": record["digest"]}),
             ({"tags": ["1.2.3-r1"]}, {}),
             (None, {"Docker-Content-Digest": record["digest"]}),
         ]
         item = main.collect(REPOSITORY)
-        self.assertEqual(item["tags"], {"latest": record["digest"], "1.2.3-r1": record["digest"]})
+        self.assertEqual(
+            item["tags"], {"latest": record["digest"], "1.2.3-r1": record["digest"]}
+        )
         self.assertEqual(len(item["releases"]), 1)
         self.assertEqual(item["legacyReleases"], ["v0.1"])
         calls = request.call_args_list
-        self.assertEqual(calls[0].kwargs["headers"]["Authorization"], "Bearer github-secret")
+        self.assertEqual(
+            calls[0].kwargs["headers"]["Authorization"], "Bearer github-secret"
+        )
         self.assertEqual(calls[2].kwargs, {})  # No API credentials on public assets.
-        self.assertEqual(calls[4].kwargs["headers"]["Authorization"], "Bearer registry-secret")
+        self.assertEqual(
+            calls[4].kwargs["headers"]["Authorization"], "Bearer registry-secret"
+        )
         self.assertEqual(calls[5].kwargs["method"], "HEAD")
 
     @patch("macros.main.request")
-    def test_reject_cross_origin_pagination(self, request):
-        request.return_value = ([], {"Link": '<https://evil.example/steal>; rel="next"'})
+    def test_reject_cross_origin_pagination(self, request: Mock) -> None:
+        """Reject pagination links that could leak credentials to another host."""
+        request.return_value = (
+            [],
+            {"Link": '<https://evil.example/steal>; rel="next"'},
+        )
         with self.assertRaisesRegex(ValueError, "cross-origin"):
-            list(main.pages("https://api.github.com/releases", {"Authorization": "secret"}))
+            list(
+                main.pages(
+                    "https://api.github.com/releases", {"Authorization": "secret"}
+                )
+            )
         self.assertEqual(request.call_count, 1)
 
     @patch("macros.main.request")
-    def test_reject_pagination_loop(self, request):
-        request.return_value = ([], {"Link": '<https://api.github.com/releases>; rel="next"'})
+    def test_reject_pagination_loop(self, request: Mock) -> None:
+        """Stop following pagination links when a URL repeats."""
+        request.return_value = (
+            [],
+            {"Link": '<https://api.github.com/releases>; rel="next"'},
+        )
         with self.assertRaisesRegex(ValueError, "Repeated"):
             list(main.pages("https://api.github.com/releases", {}))
 
     @patch("macros.main.request")
-    def test_reject_unexpected_asset_url(self, request):
-        request.return_value = ([{"draft": False, "assets": [{"name": "release.json",
-                                  "browser_download_url": "https://evil.example/release.json"}]}], {})
+    def test_reject_unexpected_asset_url(self, request: Mock) -> None:
+        """Reject release assets outside the expected GitHub download path."""
+        request.return_value = (
+            [
+                {
+                    "draft": False,
+                    "assets": [
+                        {
+                            "name": "release.json",
+                            "browser_download_url": "https://evil.example/release.json",
+                        }
+                    ],
+                }
+            ],
+            {},
+        )
         with self.assertRaisesRegex(ValueError, "asset URL"):
             main.collect(REPOSITORY)
         request.assert_called_once()
 
-    def test_validate_metadata(self):
+    def test_validate_metadata(self) -> None:
+        """Accept valid metadata and reject malformed release fields."""
         record = IMAGE["releases"][1]
         main.validate_release(record, IMAGE["image"], record["releaseTag"])
-        for change in ({"revision": None}, {"revision": True}, {"revision": -1},
-                       {"revision": 1.5}, {"immutableTag": "1.2.3-r0"},
-                       {"digest": "not-a-digest"}, {"image": "ghcr.io/other/image"},
-                       {"platforms": "linux/amd64"}, {"schemaVersion": 2}):
+        for change in (
+            {"revision": None},
+            {"revision": True},
+            {"revision": -1},
+            {"revision": 1.5},
+            {"immutableTag": "1.2.3-r0"},
+            {"digest": "not-a-digest"},
+            {"image": "ghcr.io/other/image"},
+            {"platforms": "linux/amd64"},
+            {"schemaVersion": 2},
+        ):
             with self.subTest(change=change), self.assertRaises(ValueError):
-                main.validate_release({**record, **change}, IMAGE["image"], record["releaseTag"])
+                main.validate_release(
+                    {**record, **change}, IMAGE["image"], record["releaseTag"]
+                )
 
-    def test_redirect_strips_credentials(self):
-        request = Request("https://api.github.com/asset", headers={"Authorization": "secret"})
+    def test_redirect_strips_credentials(self) -> None:
+        """Keep authorization only on same-host HTTPS redirects."""
+        request = Request(
+            "https://api.github.com/asset", headers={"Authorization": "secret"}
+        )
         redirected = main.SafeRedirect().redirect_request(
-            request, None, 302, "Found", {}, "https://assets.example/asset")
+            request, None, 302, "Found", {}, "https://assets.example/asset"
+        )
         self.assertIsNone(redirected.get_header("Authorization"))
         redirected = main.SafeRedirect().redirect_request(
-            request, None, 302, "Found", {}, "https://api.github.com/other")
+            request, None, 302, "Found", {}, "https://api.github.com/other"
+        )
         self.assertEqual(redirected.get_header("Authorization"), "secret")
         with self.assertRaises(ValueError):
-            main.SafeRedirect().redirect_request(request, None, 302, "Found", {}, "http://example.com")
+            main.SafeRedirect().redirect_request(
+                request, None, 302, "Found", {}, "http://example.com"
+            )
 
 
 if __name__ == "__main__":

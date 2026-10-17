@@ -36,7 +36,8 @@ jobs:
       - name: Install test dependencies
         run: python -m pip install -r requirements-test.txt
       - name: Ruff
-        run: ruff check .
+        # Use formatter-compatible conventions; copyright headers are not required.
+        run: ruff check --select ALL --ignore D203,D213,COM812,CPY001 .
       - name: Python tests
         run: python -m pytest macros/tests
       - name: JavaScript tests
