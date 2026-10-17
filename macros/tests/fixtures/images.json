@@ -1,0 +1,79 @@
+{
+  "refreshedAt": "2026-10-17T12:00:00+00:00",
+  "images": [
+    {
+      "repository": "tuxcrate/zrepl",
+      "image": "ghcr.io/tuxcrate/zrepl",
+      "releases": [
+        {
+          "schemaVersion": 1,
+          "image": "ghcr.io/tuxcrate/zrepl",
+          "track": "preview",
+          "version": "2.0.0-rc.1",
+          "revision": 0,
+          "immutableTag": "2.0.0-rc.1-r0",
+          "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "aliasesAtPublication": ["2.0.0-rc.1", "preview"],
+          "platforms": ["linux/amd64", "linux/arm64"],
+          "sourceCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "releaseTag": "v2.0.0-rc.1-r0",
+          "publishedAt": "2026-10-17T11:00:00Z"
+        },
+        {
+          "schemaVersion": 1,
+          "image": "ghcr.io/tuxcrate/zrepl",
+          "track": "stable",
+          "version": "1.2.3",
+          "revision": 1,
+          "immutableTag": "1.2.3-r1",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aliasesAtPublication": ["1.2.3", "1.2", "stable", "latest"],
+          "platforms": ["linux/amd64", "linux/arm64"],
+          "sourceCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "releaseTag": "v1.2.3-r1",
+          "publishedAt": "2026-10-16T11:00:00Z"
+        }
+      ],
+      "legacyReleases": ["v1.0.0-r0"],
+      "tags": {
+        "latest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "stable": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "1.2": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "1.2.3": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "1.2.3-r1": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "preview": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "2.0.0-rc.1": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "2.0.0-rc.1-r0": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "manual": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "repository": "tuxcrate/gallery-dl",
+      "image": "ghcr.io/tuxcrate/gallery-dl",
+      "releases": [
+        {
+          "schemaVersion": 1,
+          "image": "ghcr.io/tuxcrate/gallery-dl",
+          "track": "stable",
+          "version": "1.2.3",
+          "revision": 0,
+          "immutableTag": "1.2.3-r0",
+          "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "aliasesAtPublication": ["1.2.3", "1.2", "stable", "latest"],
+          "platforms": ["linux/amd64", "linux/arm64"],
+          "sourceCommit": "cccccccccccccccccccccccccccccccccccccccc",
+          "releaseTag": "v1.2.3-r0",
+          "publishedAt": "2026-10-17T10:30:00Z"
+        }
+      ],
+      "legacyReleases": [],
+      "tags": {
+        "latest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "stable": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "1.2": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "1.2.3": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "1.2.3-r0": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    }
+  ]
+}

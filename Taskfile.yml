@@ -1,0 +1,31 @@
+version: '3'
+
+vars:
+  ZENSICAL_IMAGE:
+    sh: grep -m 1 -oE 'zensical/zensical:[^[:space:]]+' .github/workflows/website.yml
+
+tasks:
+  default:
+    desc: Serve the website locally
+    cmds:
+      - >-
+        docker run --rm -it
+        -p 127.0.0.1:8000:8000
+        -v "{{.TASKFILE_DIR}}:/docs"
+        -e GH_TOKEN -e GITHUB_TOKEN
+        -e GH_IMAGE_VERSIONS_FIXTURE=macros/tests/fixtures/images.json
+        {{.ZENSICAL_IMAGE}} serve --dev-addr 0.0.0.0:8000
+  live:
+    desc: Refresh live image data and serve the website locally
+    cmds:
+      - >-
+        docker run --rm
+        -v "{{.TASKFILE_DIR}}:/docs"
+        -e GH_TOKEN -e GITHUB_TOKEN
+        {{.ZENSICAL_IMAGE}} build --clean --strict
+      - >-
+        docker run --rm -it
+        -p 127.0.0.1:8000:8000
+        -v "{{.TASKFILE_DIR}}:/docs"
+        -e GH_TOKEN -e GITHUB_TOKEN
+        {{.ZENSICAL_IMAGE}} serve --dev-addr 0.0.0.0:8000

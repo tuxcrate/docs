@@ -1,0 +1,51 @@
+[project]
+site_name = "Tuxcrate"
+site_description = "Open-source apps, ready to run."
+repo_url = "https://github.com/tuxcrate"
+edit_uri = "https://github.com/tuxcrate/website/edit/main/docs/"
+docs_dir = "docs"
+site_dir = "site"
+watch = ["templates", "macros"]
+extra_css = ["stylesheets/containers.css"]
+extra_javascript = ["javascripts/container-tags.js"]
+
+[project.theme]
+features = [
+  "content.action.edit",
+  "content.action.view",
+  "content.code.copy",
+  "navigation.tabs",
+  "navigation.tabs.sticky",
+  "navigation.path",
+  "navigation.prune",
+  "navigation.indexes",
+  "toc.follow",
+  "navigation.top",
+
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.plugins.macros]
+module_name = "macros/main"
+include_dir = "templates"
+on_error_fail = true
+on_undefined = "strict"
+
+[project.plugins.awesome-nav]
+filename = ".nav.yaml"

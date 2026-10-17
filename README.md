@@ -1,2 +1,3 @@
 # website
-The Tuxcrate website — open-source apps, ready to run.
+
+The Tuxcrate website for ready-to-run open-source apps.

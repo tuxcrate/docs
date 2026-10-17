@@ -1,0 +1,8 @@
+# Maintainer guides
+
+Repository READMEs stay short.
+Use these guides for shared setup instructions, development, and day-to-day operations.
+
+- [Container releases](container-releases.md): workflow setup, metadata, build conventions, tags, publication, and failure recovery.
+- [Dependency updates](dependency-updates.md): shared Renovate presets.
+- [Website development](website.md): image pages, version tables, local development, and deployment.

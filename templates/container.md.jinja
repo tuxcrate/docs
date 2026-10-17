@@ -1,0 +1,63 @@
+# {{ page.meta.title }}
+
+{% set container = page.meta.container %}
+{% set registry_url = "https://github.com/orgs/" ~ container.repository.split('/')[0] ~ "/packages/container/package/" ~ container.repository.split('/')[1] %}
+{% set releases_url = "https://github.com/" ~ container.repository ~ "/releases" %}
+[:lucide-external-link: Upstream]({{ container.upstream }}){ .md-button .container-link .container-link--upstream }
+[:simple-github: Container source](https://github.com/{{ container.repository }}){ .md-button .container-link .container-link--source }
+[:lucide-package: GHCR]({{ registry_url }}){ .md-button .container-link .container-link--registry }
+
+!!! info "About {{ page.meta.title }}"
+
+{{ container.description | indent(4, true) }}
+
+{% block prerequisites %}{% endblock %}
+
+## Published versions
+
+{% set versions = gh_image_versions_data(container.repository) %}
+{% set default_tag = versions.releases[0].immutableTag if versions.releases else "latest" %}
+{% if versions.preview %}
+**Preview only — fictional test data.**
+{% endif %}
+
+Published releases are listed newest first, with all tags currently pointing to each image.
+
+{% if versions.releases %}
+<div class="container-versions" data-page-size="3" data-load-size="5" markdown="1">
+
+| Track | Image Tags | App Version | Published |
+| --- | --- | --- | --- |
+{% for release in versions.releases -%}
+| {{ release.track | cell }} | {% for tag in release.tags %}<button type="button" class="container-tag" data-container-image="{{ versions.image | cell }}" data-container-tag="{{ tag | cell }}" aria-pressed="{{ 'true' if tag == default_tag else 'false' }}"><code>{{ tag | cell }}</code></button>{% if not loop.last %} {% endif %}{% endfor %} | <code>{{ release.version | cell }}</code> | [{{ release.publishedAt[:16] | replace('T', ' ') | cell }}]({{ releases_url }}/tag/{{ release.releaseTag | urlencode }}) |
+{% endfor %}
+
+{% if versions.releases | length > 3 %}
+<button type="button" class="md-button container-versions-more" hidden>List more</button>
+{% endif %}
+
+</div>
+{% else %}
+No published images with matching release metadata are available yet.
+{% endif %}
+
+{% set example_image = "ghcr.io/" ~ container.repository %}
+{% set selected_image = example_image ~ ":" ~ default_tag %}
+
+## Usage
+
+<div class="container-usage" data-container-image="ghcr.io/{{ container.repository | e }}" markdown="1">
+
+=== ":lucide-terminal: CLI"
+
+    ```sh linenums="1"
+{{ container.docker_run | docker_run | replace(example_image ~ ":latest", selected_image) | indent(4, true) }}
+    ```
+
+=== ":simple-docker: Compose"
+
+    ```yaml linenums="1"
+{{ container.compose | compose_yaml | replace(example_image ~ ":latest", selected_image) | indent(4, true) }}
+    ```
+
+</div>
