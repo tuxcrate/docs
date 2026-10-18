@@ -32,7 +32,7 @@ Published releases are listed newest first, with all tags currently pointing to 
 {% endif %}
 {% for track in tracks %}
 {% set releases = versions.releases | selectattr('track', 'equalto', track) | list %}
-### {{ track | cell }}
+### {{ track | title | cell }}
 
 <div class="container-versions" data-page-size="3" data-load-size="5" markdown="1">
 

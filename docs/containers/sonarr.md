@@ -1,5 +1,5 @@
 ---
-title: Sonarr
+title: sonarr
 container:
   repository: tuxcrate/sonarr
   upstream: https://github.com/Sonarr/Sonarr

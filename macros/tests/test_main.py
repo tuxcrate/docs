@@ -238,8 +238,8 @@ class MacroTests(unittest.TestCase):
         item["releases"].insert(0, older)  # Selection must not depend on input order.
         item["tags"][older["immutableTag"]] = older["digest"]
         text = render_versions(item)
-        self.assertEqual(text.count("\n### stable\n"), 1)
-        self.assertEqual(text.count("\n### preview\n"), 1)
+        self.assertEqual(text.count("\n### Stable\n"), 1)
+        self.assertEqual(text.count("\n### Preview\n"), 1)
         self.assertEqual(
             text.count(
                 '| Image Tags | <span class="nowrap">App Version</span>'
@@ -248,8 +248,8 @@ class MacroTests(unittest.TestCase):
             2,
         )
         self.assertNotIn("| Track |", text)
-        self.assertLess(text.index("\n### stable\n"), text.index("\n### preview\n"))
-        stable, preview = text.split("\n### stable\n")[1].split("\n### preview\n")
+        self.assertLess(text.index("\n### Stable\n"), text.index("\n### Preview\n"))
+        stable, preview = text.split("\n### Stable\n")[1].split("\n### Preview\n")
         self.assertEqual(preview.count("| <button"), 1)
         self.assertEqual(stable.count("| <button"), 2)
         self.assertIn('data-container-tag="1.2.3-r1"', text)
@@ -264,14 +264,22 @@ class MacroTests(unittest.TestCase):
         item["releases"][0]["track"] = "z-preview"
         item["releases"][1]["track"] = "a-stable"
         text = render_versions(item)
-        self.assertLess(text.index("\n### a-stable\n"), text.index("\n### z-preview\n"))
+        self.assertLess(text.index("\n### A-Stable\n"), text.index("\n### Z-Preview\n"))
 
     def test_stable_track_is_first(self) -> None:
         """Place stable before other tracks, even those earlier alphabetically."""
         item = copy.deepcopy(IMAGE)
         item["releases"][0]["track"] = "alpha"
         text = render_versions(item)
-        self.assertLess(text.index("\n### stable\n"), text.index("\n### alpha\n"))
+        self.assertLess(text.index("\n### Stable\n"), text.index("\n### Alpha\n"))
+
+    def test_prerelease_track_heading_is_title_cased(self) -> None:
+        """Title-case track headings without changing release grouping."""
+        item = copy.deepcopy(IMAGE)
+        item["releases"][0]["track"] = "prerelease"
+        text = render_versions(item)
+        self.assertIn("\n### Prerelease\n", text)
+        self.assertNotIn("\n### prerelease\n", text)
 
     def test_list_more_only_when_there_are_more_than_three_releases(self) -> None:
         """Render pagination controls only when releases exceed one page."""
@@ -292,7 +300,7 @@ class MacroTests(unittest.TestCase):
         self.assertIn(
             'class="md-button container-versions-more" hidden>List more</button>', text
         )
-        stable, preview = text.split("\n### stable\n")[1].split("\n### preview\n")
+        stable, preview = text.split("\n### Stable\n")[1].split("\n### Preview\n")
         self.assertEqual(stable.count("| <button"), 5)
         self.assertEqual(preview.count("| <button"), 1)
         self.assertEqual(stable.count("container-versions-more"), 1)
@@ -312,8 +320,8 @@ class MacroTests(unittest.TestCase):
                     item["tags"]["1.2.3-r1"] = digest
                 text = render_versions(item)
                 self.assertNotIn("/releases/tag/v1.2.3-r1", text)
-                self.assertNotIn("\n### stable\n", text)
-                self.assertIn("\n### preview\n", text)
+                self.assertNotIn("\n### Stable\n", text)
+                self.assertIn("\n### Preview\n", text)
 
     def test_tag_buttons_and_published_release_links(self) -> None:
         """Render ordered tag buttons and links to their published releases."""
@@ -391,7 +399,7 @@ class MacroTests(unittest.TestCase):
         item["releases"][0]["os_flavor"] = "<script>|"
         item["releases"][0]["os_version"] = "<img>|"
         text = render_versions(item)
-        self.assertIn("&lt;script&gt;&#124;&#96;&#91;x&#93; ", text)
+        self.assertIn("&lt;Script&gt;&#124;&#96;&#91;X&#93; ", text)
         self.assertIn(
             "`&lt;img src=x onerror=&quot;alert(1)&quot;&gt;`{ .nowrap }", text
         )
@@ -643,7 +651,7 @@ class ContainerTemplateTests(unittest.TestCase):
                 ]
                 self.assertGreaterEqual(len(stable), 10)
                 text = render_versions(item)
-                table = text.split("\n### stable\n")[1].split("</div>")[0]
+                table = text.split("\n### Stable\n")[1].split("</div>")[0]
                 self.assertEqual(table.count("| <button"), len(stable))
                 self.assertIn("container-versions-more", table)
                 self.assertIn("| — |", table)
@@ -700,7 +708,7 @@ class ContainerTemplateTests(unittest.TestCase):
         text = template_environment().from_string(body).render(
             page={"meta": yaml.safe_load(front_matter)}
         )
-        self.assertIn("### develop", text)
+        self.assertIn("### Develop", text)
         self.assertIn('data-container-tag="4.0.20.3014-r0" aria-pressed="true"', text)
         self.assertIn('data-container-tag="5.0.0.2668-r0" aria-pressed="false"', text)
         self.assertEqual(text.count("ghcr.io/tuxcrate/sonarr:4.0.20.3014-r0"), 2)
