@@ -2,6 +2,34 @@
   "refreshedAt": "2026-10-17T12:00:00+00:00",
   "images": [
     {
+      "repository": "tuxcrate/radarr",
+      "image": "ghcr.io/tuxcrate/radarr",
+      "releases": [
+        {
+          "schemaVersion": 1,
+          "image": "ghcr.io/tuxcrate/radarr",
+          "track": "stable",
+          "version": "6.1.2.3456",
+          "revision": 0,
+          "immutableTag": "6.1.2.3456-r0",
+          "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "aliasesAtPublication": ["6.1.2.3456", "6", "6.1", "latest"],
+          "platforms": ["linux/amd64", "linux/arm64"],
+          "os_flavor": "alpine",
+          "os_version": "3.24.2",
+          "releaseTag": "v6.1.2.3456-r0",
+          "publishedAt": "2026-10-17T12:00:00Z"
+        }
+      ],
+      "tags": {
+        "6.1.2.3456-r0": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "6.1.2.3456": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "6": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "6.1": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "latest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
       "repository": "tuxcrate/sonarr",
       "image": "ghcr.io/tuxcrate/sonarr",
       "releases": [
