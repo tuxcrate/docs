@@ -8,6 +8,10 @@
   width: 100%;
 }
 
+.md-typeset .nowrap {
+  white-space: nowrap;
+}
+
 .md-typeset .container-versions [hidden] {
   display: none;
 }

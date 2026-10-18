@@ -36,10 +36,10 @@ Published releases are listed newest first, with all tags currently pointing to 
 
 <div class="container-versions" data-page-size="3" data-load-size="5" markdown="1">
 
-| Image Tags | App Version | OS | Published |
+| Image Tags | <span class="nowrap">App Version</span> | OS | Published |
 | --- | --- | --- | --- |
 {% for release in releases -%}
-| {% for tag in release.tags %}<button type="button" class="container-tag" data-container-image="{{ versions.image | cell }}" data-container-tag="{{ tag | cell }}" aria-pressed="{{ 'true' if tag == default_tag else 'false' }}"><code>{{ tag | cell }}</code></button>{% if not loop.last %} {% endif %}{% endfor %} | <code>{{ release.version | cell }}</code> | {% if release.get('os_flavor') and release.get('os_version') %}{{ release.os_flavor | title | cell }}/{{ release.os_version | cell }}{% else %}—{% endif %} | [{{ release.publishedAt[:16] | replace('T', ' ') | cell }}]({{ releases_url }}/tag/{{ release.releaseTag | urlencode }}) |
+| {% for tag in release.tags %}<button type="button" class="container-tag" data-container-image="{{ versions.image | cell }}" data-container-tag="{{ tag | cell }}" aria-pressed="{{ 'true' if tag == default_tag else 'false' }}"><code>{{ tag | cell }}</code></button>{% if not loop.last %} {% endif %}{% endfor %} | `{{ release.version | cell }}`{ .nowrap } | {% if release.get('os_flavor') and release.get('os_version') %}{{ release.os_flavor | title | cell }}/{{ release.os_version | cell }}{% else %}—{% endif %} | [{{ release.publishedAt[:16] | replace('T', ' ') | cell }}]({{ releases_url }}/tag/{{ release.releaseTag | urlencode }}) |
 {% endfor %}
 
 {% if releases | length > 3 %}

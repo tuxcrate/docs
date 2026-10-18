@@ -240,7 +240,10 @@ class MacroTests(unittest.TestCase):
         text = render_versions(item)
         self.assertEqual(text.count("\n### stable\n"), 1)
         self.assertEqual(text.count("\n### preview\n"), 1)
-        self.assertEqual(text.count("| Image Tags | App Version | OS | Published |"), 2)
+        self.assertEqual(
+            text.count('| Image Tags | <span class="nowrap">App Version</span> | OS | Published |'),
+            2,
+        )
         self.assertNotIn("| Track |", text)
         self.assertLess(text.index("\n### stable\n"), text.index("\n### preview\n"))
         stable, preview = text.split("\n### stable\n")[1].split("\n### preview\n")
@@ -360,7 +363,7 @@ class MacroTests(unittest.TestCase):
                 item["releases"][0].update(os_flavor=flavor, os_version=version)
                 text = render_versions(item)
                 self.assertIn(f"| {expected} |", text)
-                self.assertIn("| <code>1.2.3</code> | — |", text)
+                self.assertIn("| `1.2.3`{ .nowrap } | — |", text)
 
     def test_os_column_handles_missing_metadata(self) -> None:
         """Keep older releases visible when OS metadata is absent or incomplete."""
@@ -375,7 +378,7 @@ class MacroTests(unittest.TestCase):
                 item = copy.deepcopy(IMAGE)
                 item["releases"][0].update(fields)
                 text = render_versions(item)
-                self.assertIn("| <code>2.0.0-rc.1</code> | — |", text)
+                self.assertIn("| `2.0.0-rc.1`{ .nowrap } | — |", text)
 
     def test_template_escapes_table_values(self) -> None:
         """Prevent release metadata from injecting HTML or table syntax."""
@@ -575,7 +578,10 @@ class ContainerTemplateTests(unittest.TestCase):
                 versions.assert_called_once_with(f"tuxcrate/{name}")
                 self.assertEqual(text.count(f"ghcr.io/tuxcrate/{name}:0.7.0-r5"), 2)
                 self.assertNotIn(f"ghcr.io/tuxcrate/{name}:latest", text)
-                self.assertIn("| Image Tags | App Version | OS | Published |", text)
+                self.assertIn(
+                    '| Image Tags | <span class="nowrap">App Version</span> | OS | Published |',
+                    text,
+                )
                 self.assertNotIn("| Image Tags | Track |", text)
                 self.assertNotIn("No image has been published yet", text)
                 if name == "zrepl":
@@ -603,7 +609,10 @@ class ContainerTemplateTests(unittest.TestCase):
             .render(page={"meta": yaml.safe_load(front_matter)})
         )
         self.assertIn("fictional test data", text)
-        self.assertIn("| Image Tags | App Version | OS | Published |", text)
+        self.assertIn(
+            '| Image Tags | <span class="nowrap">App Version</span> | OS | Published |',
+            text,
+        )
         self.assertEqual(text.count("ghcr.io/tuxcrate/gallery-dl:1.2.3-r0"), 2)
         request.assert_not_called()
 
@@ -655,8 +664,11 @@ class ContainerTemplateTests(unittest.TestCase):
         self.assertEqual(text.count("ghcr.io/tuxcrate/zrepl:1.2.3-r1"), 2)
         self.assertNotIn("ghcr.io/tuxcrate/zrepl:latest", text)
         self.assertIn("fictional test data", text)
-        self.assertIn("| Image Tags | App Version | OS | Published |", text)
-        self.assertIn("| <code>1.2.3</code> | — | [2026-10-16 11:00]", text)
+        self.assertIn(
+            '| Image Tags | <span class="nowrap">App Version</span> | OS | Published |',
+            text,
+        )
+        self.assertIn("| `1.2.3`{ .nowrap } | — | [2026-10-16 11:00]", text)
         self.assertNotIn("<code>manual</code>", text)
         self.assertNotIn("v1.0.0-r0", text)
         self.assertNotIn("sha256:", text)
