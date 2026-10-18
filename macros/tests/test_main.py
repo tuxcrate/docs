@@ -788,6 +788,12 @@ class ContainerTemplateTests(unittest.TestCase):
         self.assertIn("fictional test data", text)
         self.assertEqual(text.count("ghcr.io/tuxcrate/prowlarr:2.1.2.3456-r0"), 2)
         self.assertNotIn("ghcr.io/tuxcrate/prowlarr:latest", text)
+        self.assertIn('data-container-tag="2.1.2.3455-prerelease-r0"', text)
+        self.assertIn('data-container-tag="2-prerelease"', text)
+        self.assertIn('data-container-tag="2.1-prerelease"', text)
+        self.assertNotIn('data-container-tag="2.1.2.3455-r0"', text)
+        self.assertIn("Stable has a newer version", text)
+        self.assertIn("## Choosing a tag", text)
         service = metadata["container"]["compose"]["services"]["prowlarr"]
         self.assertEqual(service["ports"], ["127.0.0.1:9696:9696"])
         self.assertEqual(service["volumes"], ["prowlarr-config:/config"])

@@ -70,3 +70,17 @@ The container packaging is licensed under AGPL-3.0. Prowlarr retains its GPL-3.0
 license at `/opt/prowlarr/LICENSE`; `/usr/share/doc/prowlarr/SOURCE` links to the
 matching upstream source and release.
 {% endblock %}
+
+{% block tags %}
+## Choosing a tag
+
+`latest` and unsuffixed version tags follow stable releases from Prowlarr's
+`master` channel. The prerelease track follows `develop` releases and uses
+`-prerelease` suffixes on its exact-version, major, and major/minor tags.
+
+Prereleases never move `latest`. When stable is newer than the configured
+prerelease, that prerelease track is skipped until a newer upstream release is
+available. Existing prerelease tags remain available but stop receiving rebuilds.
+Back up `/config` before switching channels; a newer version may migrate the
+database in ways an older version cannot read.
+{% endblock %}
