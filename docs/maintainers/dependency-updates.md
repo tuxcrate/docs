@@ -3,6 +3,25 @@
 [`tuxcrate/renovate-config`](https://github.com/tuxcrate/renovate-config) contains the shared [Renovate](https://docs.renovatebot.com/) presets.
 To use them, enable the Renovate GitHub App for each repository and add a `renovate.json` in its root.
 
+## Using Tuxcrate images
+
+If your repository uses Tuxcrate images, add the standalone `tuxcrate` preset to your existing Renovate configuration:
+
+```json
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>tuxcrate/renovate-config:tuxcrate"]
+}
+```
+
+It supports `X.Y.Z-rN` and `X.Y.Z.W-rN` image tags from `ghcr.io/tuxcrate/**`, including numeric revision updates such as `-r9` to `-r10`.
+Image revision changes are patch updates.
+Floating aliases and prerelease tags are excluded.
+
+This preset only configures versioning.
+It does not inherit Tuxcrate's repository policies or change your automerge, digest pinning, or scheduling settings.
+Publish the preset before adding the import to consuming repositories.
+
 ## General repositories
 
 ```json
