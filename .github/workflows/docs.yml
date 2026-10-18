@@ -54,8 +54,7 @@ jobs:
       - name: Build docs
         uses: docker://zensical/zensical:0.0.71
         env:
-          GH_TOKEN: ${{ github.event_name != 'pull_request' && secrets.GITHUB_TOKEN || '' }}
-          GH_IMAGE_VERSIONS_FIXTURE: ${{ github.event_name == 'pull_request' && 'macros/tests/fixtures/images.json' || '' }}
+          GH_TOKEN: ${{ github.token }}
         with:
           args: build --clean --strict
       - name: Upload Pages artifact

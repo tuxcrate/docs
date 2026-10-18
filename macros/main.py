@@ -231,7 +231,8 @@ def collect(repository: str) -> Metadata:
     """Collect release metadata and current registry digests for an image."""
     image = f"ghcr.io/{repository}"
     releases, legacy = collect_releases(repository, image)
-    tags = collect_tags(repository, image)
+    # A new repository may not have a GHCR package until its first release.
+    tags = collect_tags(repository, image) if releases else {}
     return {
         "repository": repository,
         "image": image,
