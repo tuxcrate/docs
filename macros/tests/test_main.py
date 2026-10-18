@@ -850,7 +850,9 @@ class ContainerTemplateTests(unittest.TestCase):
         )
         self.assertIn("### Develop", text)
         self.assertIn('data-container-tag="4.0.20.3014-r0" aria-pressed="true"', text)
-        self.assertIn('data-container-tag="5.0.0.2668-r0" aria-pressed="false"', text)
+        self.assertIn(
+            'data-container-tag="5.0.0.2668-prerelease-r0" aria-pressed="false"', text
+        )
         self.assertEqual(text.count("ghcr.io/tuxcrate/sonarr:4.0.20.3014-r0"), 2)
         self.assertIn("read_only: true", text)
         self.assertIn("--cap-drop=ALL", text)
@@ -1077,11 +1079,41 @@ class SourceTests(unittest.TestCase):
             {"image": "ghcr.io/other/image"},
             {"platforms": "linux/amd64"},
             {"schemaVersion": 2},
+            {"schemaVersion": 3},
         ):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 main.validate_release(
                     {**record, **change}, IMAGE["image"], record["releaseTag"]
                 )
+
+    def test_validate_suffixed_image_version(self) -> None:
+        """Keep application versions distinct from schema 2 image versions."""
+        record = {
+            **IMAGE["releases"][1],
+            "schemaVersion": 2,
+            "version": "5.0.0.2668",
+            "imageVersion": "5.0.0.2668-prerelease",
+            "revision": 3,
+            "immutableTag": "5.0.0.2668-prerelease-r3",
+        }
+        tag = "v5.0.0.2668-prerelease-r3"
+        main.validate_release(record, IMAGE["image"], tag)
+        for change in (
+            {"imageVersion": None},
+            {"imageVersion": ""},
+            {"imageVersion": "bad tag"},
+            {"imageVersion": "9.9.9-prerelease"},
+            {"imageVersion": "5.0.0.2668"},
+            {"immutableTag": "5.0.0.2668-r3"},
+        ):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                main.validate_release({**record, **change}, IMAGE["image"], tag)
+        stable = {
+            **IMAGE["releases"][1],
+            "schemaVersion": 2,
+            "imageVersion": IMAGE["releases"][1]["version"],
+        }
+        main.validate_release(stable, IMAGE["image"], stable["releaseTag"])
 
     def test_redirect_strips_credentials(self) -> None:
         """Keep authorization only on same-host HTTPS redirects."""

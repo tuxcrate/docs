@@ -6,19 +6,20 @@
       "image": "ghcr.io/tuxcrate/radarr",
       "releases": [
         {
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "image": "ghcr.io/tuxcrate/radarr",
           "track": "prerelease",
           "prerelease": true,
           "version": "6.1.2.3455",
+          "imageVersion": "6.1.2.3455-prerelease",
           "revision": 0,
-          "immutableTag": "6.1.2.3455-r0",
+          "immutableTag": "6.1.2.3455-prerelease-r0",
           "digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-          "aliasesAtPublication": ["6.1.2.3455", "6-prerelease", "6.1-prerelease"],
+          "aliasesAtPublication": ["6.1.2.3455-prerelease", "6-prerelease", "6.1-prerelease"],
           "platforms": ["linux/amd64", "linux/arm64"],
           "os_flavor": "alpine",
           "os_version": "3.24.2",
-          "releaseTag": "v6.1.2.3455-r0",
+          "releaseTag": "v6.1.2.3455-prerelease-r0",
           "publishedAt": "2026-10-18T12:00:00Z"
         },
         {
@@ -38,8 +39,8 @@
         }
       ],
       "tags": {
-        "6.1.2.3455-r0": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "6.1.2.3455": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "6.1.2.3455-prerelease-r0": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "6.1.2.3455-prerelease": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "6-prerelease": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "6.1-prerelease": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         "6.1.2.3456-r0": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -54,19 +55,20 @@
       "image": "ghcr.io/tuxcrate/sonarr",
       "releases": [
         {
-          "schemaVersion": 1,
+          "schemaVersion": 2,
           "image": "ghcr.io/tuxcrate/sonarr",
           "track": "develop",
           "prerelease": true,
           "version": "5.0.0.2668",
+          "imageVersion": "5.0.0.2668-prerelease",
           "revision": 0,
-          "immutableTag": "5.0.0.2668-r0",
+          "immutableTag": "5.0.0.2668-prerelease-r0",
           "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "aliasesAtPublication": ["5.0.0.2668", "develop", "preview"],
+          "aliasesAtPublication": ["5.0.0.2668-prerelease", "develop", "preview"],
           "platforms": ["linux/amd64", "linux/arm64"],
           "os_flavor": "alpine",
           "os_version": "3.24.2",
-          "releaseTag": "v5.0.0.2668-r0",
+          "releaseTag": "v5.0.0.2668-prerelease-r0",
           "publishedAt": "2026-10-18T12:00:00Z"
         },
         {
@@ -86,8 +88,8 @@
         }
       ],
       "tags": {
-        "5.0.0.2668-r0": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "5.0.0.2668": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "5.0.0.2668-prerelease-r0": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "5.0.0.2668-prerelease": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "develop": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "preview": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "4.0.20.3014-r0": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
