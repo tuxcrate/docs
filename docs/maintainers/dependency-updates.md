@@ -17,6 +17,9 @@ If your repository uses Tuxcrate images, add the standalone `tuxcrate` preset to
 It supports `X.Y.Z-rN` and `X.Y.Z.W-rN` image tags from `ghcr.io/tuxcrate/**`, including numeric revision updates such as `-r9` to `-r10`.
 Image revision changes are patch updates.
 Floating aliases and prerelease tags are excluded.
+Numeric upstream prereleases must use suffixed image tags such as `5.0.0.2668-prerelease-r0`, rather than stable-looking `5.0.0.2668-r0` tags.
+Image repositories configure this with `tags: ["${version}-prerelease", ...]`; the upstream pin stays numeric.
+Historical unsuffixed prerelease tags must be retired separately or consumers can still discover them.
 
 This preset only configures versioning.
 It does not inherit Tuxcrate's repository policies or change your automerge, digest pinning, or scheduling settings.

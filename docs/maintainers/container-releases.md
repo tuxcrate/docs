@@ -68,8 +68,8 @@ The current setup assumes this shared repository is public.
 - An upstream version starts at `0.7.0-r0`; each rebuild increments the image revision.
   `0.7.1` starts again at `0.7.1-r0`.
 - The revision tag never moves.
-  The exact application version and the track's declared aliases move to its new image revision.
-  For example, aliases `["{major}.{minor}", latest]` publish `0.7` and `latest` for `0.7.0`.
+  The track's explicitly configured `tags` move to its new image revision.
+  For example, tags `["${version}", "${major}.${minor}", latest]` publish `0.7.0`, `0.7`, and `latest` for `0.7.0`.
   Prereleases may use named aliases such as `preview`, never stable aliases.
   Multiple current releases can share the same default branch through tracks.
 - The image is first uploaded by digest, with BuildKit provenance and an SBOM, so failed builds never publish named release tags.
@@ -94,6 +94,7 @@ The current setup assumes this shared repository is public.
   Draft assets are not published versions.
 - Prerelease versions create GitHub prereleases and never become GitHub's latest release.
   Tracks may also set `prerelease: true` when upstream uses numeric versions without a prerelease suffix, as Sonarr does.
+  Such tracks must suffix their image version, for example with `"${version}-prerelease"`; neither the bare numeric version nor its unsuffixed revision is published automatically.
   In track mode only the owner of `latest` can become the latest release.
 
 If publication fails, it may leave an untagged image and a draft release.
@@ -227,12 +228,12 @@ tracks:
   - name: stable
     version: "1.2.3"
     baseImage: debian:13-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
-    aliases: [latest, stable, "1.2"]
+    tags: ["${version}", latest, stable, "${major}.${minor}"]
 
   - name: preview
     version: "2.0.0-rc.1"
     baseImage: debian:13-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
-    aliases: [preview]
+    tags: ["${version}", preview]
     buildArgs:
       PACKAGE_REVISION: "1"
 ```
@@ -251,6 +252,7 @@ Configuration supports an optional top-level `image` and per-track `baseImage`, 
 Application versions may use three or four numeric components (`X.Y.Z` or `X.Y.Z.W`), with an optional prerelease suffix.
 Set `prerelease: true` on tracks whose upstream releases are prereleases despite having purely numeric versions.
 This flag is carried through the build matrix to release reservation and cannot be used to make a suffixed prerelease stable.
+An image-version suffix also implies prerelease behavior, even if the upstream version is numeric.
 Such tracks may only own named aliases like `develop` or `preview`, never `latest`, `stable`, or numeric series aliases.
 
 The planner skips tracks explicitly marked `prerelease: true` when any non-prerelease track has a higher application version, regardless of track names or order.
@@ -288,7 +290,7 @@ tracks:
       depName: gallery-dl
       version: "1.32.16"
     baseImage: debian:13-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
-    aliases: ["{major}", "{major}.{minor}", latest]
+    tags: ["${version}", "${major}", "${major}.${minor}", latest]
 ```
 
 The release tooling never uses registry metadata to fetch or execute anything.
@@ -300,8 +302,50 @@ The YAML decoder also rejects unknown fields, duplicate keys, and multiple docum
 Omitted build settings use the standard defaults above.
 Additional build arguments are declared only in each track's `buildArgs`; `APP_VERSION` and `BASE_IMAGE` are reserved and cannot be overridden there.
 `APP_VERSION` is always supplied by the release planner in the workflow's build arguments.
-Release metadata and image labels use the application version without the Debian package revision.
-All tracks share one image repository; parallel packaging variants of the same version are not implemented yet.
+The `${version}` placeholder uses the application version without the Debian package revision.
+`APP_VERSION` remains the exact installation pin and never receives a synthetic image suffix.
+Image labels use the expanded image version, including any configured suffix.
+All tracks share one image repository; tracks installing the same application version must use distinct image versions and tags.
+
+### Explicit tags and immutable revisions
+
+Every track must declare a nonempty `tags` list with exactly one template containing `${version}`.
+This template must be `${version}` or `${version}-<suffix>`, and its expanded value must be a supported three- or four-part version with an optional prerelease suffix.
+Its position in the list does not matter.
+The planner expands `${major}` and `${minor}` too; quote templates in YAML.
+
+For an upstream release that is numeric but not stable:
+
+```yaml
+tracks:
+  - name: prerelease
+    upstream:
+      datasource: github-releases
+      depName: Sonarr/Sonarr
+      version: "5.0.0.2668"
+    prerelease: true
+    tags:
+      - "${version}-prerelease"
+      - "${major}-prerelease"
+      - "${major}.${minor}-prerelease"
+```
+
+The installation pin is `5.0.0.2668`, while the image version is `5.0.0.2668-prerelease`.
+The first publication creates immutable image tag `5.0.0.2668-prerelease-r0` and GitHub release tag `v5.0.0.2668-prerelease-r0`.
+Configured tags `5.0.0.2668-prerelease`, `5-prerelease`, and `5.0-prerelease` follow its newest revision.
+Neither `5.0.0.2668` nor `5.0.0.2668-r0` is generated.
+Revision allocation is per image version, so stable and prerelease namespaces are independent.
+
+`release.json` schema version 2 retains `version` as the application version and adds required `imageVersion` for the expanded image version.
+`immutableTag` is `${imageVersion}-rN`; `aliasesAtPublication` records every configured expanded moving tag, including the version tag.
+The website accepts both schemas: historical schema version 1 derives its image version from `version`.
+Do not rewrite historical release assets during migration.
+
+To migrate `meta.yaml`, rename `aliases` to `tags`, add `"${version}"` (or a suffixed equivalent), and replace `{major}` / `{minor}` with `${major}` / `${minor}`.
+The old `aliases` field and placeholder syntax are rejected.
+Deploy website schema support before publishing schema version 2 releases, and coordinate shared tooling and caller updates.
+Old registry tags remain until explicitly retired; adding suffixed tags alone does not hide historical unsuffixed prerelease tags from Renovate.
+If existing images are retagged into the new revision namespace, also reserve those revisions with matching Git tags at their original source commits so future releases cannot reuse them.
 
 Rules:
 
@@ -309,20 +353,20 @@ Rules:
   PRs validate the complete configuration and build every track, publishing previews only when eligible.
   Releases build tracks one at a time under the existing repository-wide publishing lock.
   A failure in one track does not stop the others.
-- Each track declares `aliases` explicitly; use `[]` for no additional aliases.
-  The exact version alias is always created automatically.
-- Aliases may contain `{major}` and `{minor}`, e.g. `"{major}.{minor}"` becomes `0.8` for application version `0.8.0`.
+- Each track declares all moving tags explicitly in `tags`, including its `${version}` template.
+  Only the immutable revision tag is created automatically.
+- Tags may contain `${major}` and `${minor}`, e.g. `"${major}.${minor}"` becomes `0.8` for application version `0.8.0`.
   Expansion happens before validation and ownership checks, so duplicate or conflicting expanded aliases are rejected.
   Unknown placeholders are rejected.
   Prereleases still cannot own numeric series aliases.
   Removing a previously expanded series does not delete its old tag.
-- Track names, versions, and aliases must be unique where applicable.
-  No two tracks may own the same exact version or alias.
-  Full application versions and revision-shaped tags cannot be declared as aliases.
+- Track names, image versions, and tags must be unique where applicable.
+  No two tracks may own the same tag.
+  Full versions other than the track's image version and revision-shaped tags cannot be declared as moving tags.
 - Prereleases cannot own `latest`, `stable`, or numeric version-series aliases.
   Version build metadata (`+...`) is unsupported because `+` is not a Docker tag character.
   Versions ending in `-rN` are reserved for image revisions.
-- Revisions are allocated per exact application version, including prerelease identifiers, using both Git tags and releases/drafts.
+- Revisions are allocated per exact image version, including prerelease identifiers, using both Git tags and releases/drafts.
   They do not reset when a track is renamed or a version is reassigned to another track.
 - Promotion requires a reviewed configuration change; build order does not promote tracks.
   Removing a track stops its builds but does not delete historical tags or remove its old moving aliases from GHCR.
@@ -347,7 +391,7 @@ tracks:
   - name: stable
     version: "1.2.3"
     baseImage: debian:13-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
-    aliases: [latest]
+    tags: ["${version}", latest]
 ```
 
 Each track declares its own `baseImage`; there is no top-level default.
@@ -434,6 +478,8 @@ It is written in Go and uses `go.yaml.in/yaml/v3` for strict YAML parsing.
 The workflow compiles it using the Go toolchain provided by the Ubuntu runner; Go 1.23 or newer is required.
 Build it with `go build -o /path/to/container-release ./cmd/container-release`.
 Run the binary from the container source checkout with `plan`, `metadata`, `manifest`, or `reserve` and the required workflow environment variables set.
+Publication commands receive `APP_VERSION` (the application version, without an APT package revision), `IMAGE_VERSION` (the expanded version tag), and `TAGS` (a JSON array of expanded moving tags) from the planner's build matrix.
+Only the Containerfile's build argument receives a full APT package pin.
 The `plan` command always reads `meta.yaml` from the current directory; it has no alternate path or environment fallback.
 The `reserve` command creates a real draft release; use `go test` for validation without publishing.
 

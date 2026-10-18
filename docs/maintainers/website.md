@@ -94,6 +94,8 @@ You do not need a separate generator, Go toolchain, Python requirements file, or
 ### Sources of truth
 
 - GitHub releases and their `release.json` assets provide application versions, image revisions, tracks, platforms, and immutable release history.
+  Schema version 2 includes `imageVersion` for suffixed image tags while `version` remains the upstream application version.
+  The website accepts both schema versions 1 and 2 and continues comparing application versions, not synthetic image suffixes.
   Drafts are excluded; prereleases are included.
   The table lists verified releases newest first, with their revision tags, application versions, and publication dates.
   Revision tags link to GitHub releases, with a GHCR link beside each tag.

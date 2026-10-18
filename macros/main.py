@@ -32,6 +32,7 @@ class MacroEnvironment(Protocol):
 
 TAG = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+IMAGE_VERSION_SCHEMA = 2
 CONTAINERS_DIR = Path(__file__).resolve().parents[1] / "docs/containers"
 ACCEPT_MANIFEST = (
     "application/vnd.oci.image.index.v1+json, "
@@ -124,7 +125,7 @@ def validate_release(record: Metadata, image: str, release_tag: str) -> None:
     """Check release metadata against its image, tag, digest, and platforms."""
     revision = record.get("revision")
     if (
-        record.get("schemaVersion") != 1
+        record.get("schemaVersion") not in (1, IMAGE_VERSION_SCHEMA)
         or record.get("image") != image
         or type(revision) is not int
         or revision < 0
@@ -135,8 +136,21 @@ def validate_release(record: Metadata, image: str, release_tag: str) -> None:
         if not isinstance(record.get(key), str) or not TAG.fullmatch(record[key]):
             msg = f"Invalid release {key}"
             raise ValueError(msg)
+    image_version = record["version"]
+    if record["schemaVersion"] == IMAGE_VERSION_SCHEMA:
+        image_version = record.get("imageVersion")
+        if (
+            not isinstance(image_version, str)
+            or not TAG.fullmatch(image_version)
+            or (
+                image_version != record["version"]
+                and not image_version.startswith(f"{record['version']}-")
+            )
+        ):
+            msg = "Invalid release imageVersion"
+            raise ValueError(msg)
     if (
-        record["immutableTag"] != f"{record['version']}-r{revision}"
+        record["immutableTag"] != f"{image_version}-r{revision}"
         or release_tag != f"v{record['immutableTag']}"
         or not DIGEST.fullmatch(record.get("digest", ""))
     ):
