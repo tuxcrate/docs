@@ -93,6 +93,7 @@ The current setup assumes this shared repository is public.
   The GitHub release's `published_at` is the authoritative publication timestamp.
   Draft assets are not published versions.
 - Prerelease versions create GitHub prereleases and never become GitHub's latest release.
+  Tracks may also set `prerelease: true` when upstream uses numeric versions without a prerelease suffix, as Sonarr does.
   In track mode only the owner of `latest` can become the latest release.
 
 If publication fails, it may leave an untagged image and a draft release.
@@ -175,6 +176,11 @@ Each Containerfile must be able to install the chosen version on every configure
 Track configuration does not discover upstream releases or make unavailable prerelease packages available.
 
 Configuration supports an optional top-level `image` and per-track `baseImage`, `context`, `containerfile`, `platforms` (comma-separated), `buildArgs` (string map), and `upstream` discovery metadata.
+Application versions may use three or four numeric components (`X.Y.Z` or `X.Y.Z.W`), with an optional prerelease suffix.
+Set `prerelease: true` on tracks whose upstream releases are prereleases despite having purely numeric versions.
+This flag is carried through the build matrix to release reservation and cannot be used to make a suffixed prerelease stable.
+Such tracks may only own named aliases like `develop` or `preview`, never `latest`, `stable`, or numeric series aliases.
+The APT and PyPI datasource restrictions below remain unchanged.
 Supported datasources are:
 
 - `deb`: Debian package `depName`, HTTP(S) `registryUrl` with `suite`, `components`, and `binaryArch` query parameters, and full stable `X.Y.Z-N` package `version`.
@@ -183,9 +189,11 @@ Supported datasources are:
   An optional HTTP(S) `registryUrl` selects an alternate index; omit it for public PyPI.
   The package version becomes `APP_VERSION` unchanged.
   Other PEP 440 formats, including prereleases, post releases, epochs, and local versions, are not supported.
+- Other Renovate datasource identifiers, including `github-releases`: a nonempty `depName`, a supported three- or four-part `version`, and an optional HTTP(S) `registryUrl`.
+  Configure any tag-prefix extraction and versioning in Renovate; the Containerfile must install the exact version.
 
 When using `upstream`, omit the track-level `version`.
-Both datasources inject the exact package pin as `APP_VERSION`.
+All datasources inject the exact package or application pin as `APP_VERSION`.
 Without `upstream`, the track's `version` is used unchanged.
 Containerfiles use `ARG APP_VERSION` to receive the pin; there is no separate package-version build argument.
 For example:

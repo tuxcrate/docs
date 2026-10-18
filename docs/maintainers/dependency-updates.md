@@ -31,6 +31,7 @@ It also:
 - Updates each track's complete `baseImage: image:tag@sha256:...` reference in `meta.yaml`, retaining Docker tag suffixes such as `-slim`.
 - Uses one JSONata manager to read each track's `upstream.datasource`, `depName`, `version`, and optional `registryUrl` directly from YAML.
   The datasource is selected dynamically within that manager.
+  The track name becomes Renovate's `depType`, so repositories can apply different `matchDepTypes` policies to stable and prerelease tracks of the same upstream.
 - Applies datasource-specific version rules: `deb` uses Debian versioning and stable `X.Y.Z-N` pins; `pypi` uses PEP 440 versioning and stable `X.Y.Z` pins.
   Omit `registryUrl` to use public PyPI.
 - Keeps the shared `tuxcrate/github-actions` workflow on its coordinated tooling ref without pinning it independently to a digest.
@@ -42,9 +43,12 @@ Require successful uncached `linux/amd64` and `linux/arm64` PR builds before mer
 Discovery does not confirm that the package is available for both architectures.
 
 The Renovate extractor can discover other datasources too.
-The shared release planner, however, currently accepts only `deb` and `pypi` upstream metadata.
-Additional sources need compatible planner validation, version rules, and Containerfile installation logic.
+The shared release planner accepts other datasource identifiers with a nonempty dependency name and a supported three- or four-part application version.
+Additional sources still need compatible version rules and Containerfile installation logic.
 Custom JSONata dependencies otherwise default to `semver-coerced` versioning unless a package rule overrides it.
+Sonarr uses `github-releases`, strips the leading `v` from release tags, and uses `loose` versioning for its four-part versions.
+Its stable track ignores upstream prereleases; develop opts into them without following GitHub's latest stable release.
+Image builds verify the upstream release's prerelease flag and branch-specific assets, rejecting a release from the wrong channel.
 
 See [container releases](container-releases.md) for the metadata schema.
 Publish shared tooling and preset changes before migrating image repositories.

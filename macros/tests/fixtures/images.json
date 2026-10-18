@@ -2,6 +2,53 @@
   "refreshedAt": "2026-10-17T12:00:00+00:00",
   "images": [
     {
+      "repository": "tuxcrate/sonarr",
+      "image": "ghcr.io/tuxcrate/sonarr",
+      "releases": [
+        {
+          "schemaVersion": 1,
+          "image": "ghcr.io/tuxcrate/sonarr",
+          "track": "develop",
+          "version": "5.0.0.2668",
+          "revision": 0,
+          "immutableTag": "5.0.0.2668-r0",
+          "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "aliasesAtPublication": ["5.0.0.2668", "develop", "preview"],
+          "platforms": ["linux/amd64", "linux/arm64"],
+          "os_flavor": "alpine",
+          "os_version": "3.24.2",
+          "releaseTag": "v5.0.0.2668-r0",
+          "publishedAt": "2026-10-18T12:00:00Z"
+        },
+        {
+          "schemaVersion": 1,
+          "image": "ghcr.io/tuxcrate/sonarr",
+          "track": "stable",
+          "version": "4.0.20.3014",
+          "revision": 0,
+          "immutableTag": "4.0.20.3014-r0",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "aliasesAtPublication": ["4.0.20.3014", "4", "4.0", "latest"],
+          "platforms": ["linux/amd64", "linux/arm64"],
+          "os_flavor": "alpine",
+          "os_version": "3.24.2",
+          "releaseTag": "v4.0.20.3014-r0",
+          "publishedAt": "2026-10-17T12:00:00Z"
+        }
+      ],
+      "tags": {
+        "5.0.0.2668-r0": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "5.0.0.2668": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "develop": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "preview": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "4.0.20.3014-r0": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "4.0.20.3014": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "4": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "4.0": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "latest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
       "repository": "tuxcrate/zrepl",
       "image": "ghcr.io/tuxcrate/zrepl",
       "releases": [
