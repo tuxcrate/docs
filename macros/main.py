@@ -267,6 +267,37 @@ def published_releases(item: Metadata) -> Iterator[Metadata]:
         yield release
 
 
+def application_version_key(value: str) -> tuple[tuple[int, ...], bool] | None:
+    """Compare three/four-part versions, with suffixes below stable versions."""
+    match = re.fullmatch(
+        r"([0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?)(?:-([A-Za-z0-9.-]+))?", value
+    )
+    if not match:
+        return None
+    parts = tuple(int(part) for part in match[1].split("."))
+    return parts + (0,) * (4 - len(parts)), match[2] is None
+
+
+def outdated_tracks(releases: list[Metadata]) -> dict[str, Metadata]:
+    """Find non-stable tracks whose highest verified version trails stable."""
+    newest = {}
+    for release in releases:
+        key = application_version_key(release["version"])
+        if key is None:
+            continue
+        track = release["track"]
+        if track not in newest or key > newest[track][0]:
+            newest[track] = (key, release["version"])
+    if "stable" not in newest:
+        return {}
+    stable_key, stable_version = newest["stable"]
+    return {
+        track: {"version": version, "stable_version": stable_version}
+        for track, (key, version) in newest.items()
+        if track != "stable" and key < stable_key
+    }
+
+
 def gh_image_versions_data(name: str) -> Metadata:
     """Return structured, verified releases and their current tags for the template."""
     repository = name if "/" in name else f"tuxcrate/{name}"
@@ -295,6 +326,7 @@ def gh_image_versions_data(name: str) -> Metadata:
     return {
         "image": item["image"],
         "releases": releases,
+        "outdated_tracks": outdated_tracks(releases),
         "preview": bool(fixture),
     }
 

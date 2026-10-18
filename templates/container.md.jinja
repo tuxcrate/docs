@@ -34,6 +34,13 @@ Published releases are listed newest first, with all tags currently pointing to 
 {% set releases = versions.releases | selectattr('track', 'equalto', track) | list %}
 ### {{ track | title | cell }}
 
+{% set notice = versions.get('outdated_tracks', {}).get(track) %}
+{% if notice %}
+!!! warning "Stable has a newer version"
+
+    This track's newest application version, `{{ notice.version | cell }}`, is older than stable (`{{ notice.stable_version | cell }}`).
+
+{% endif %}
 <div class="container-versions" data-page-size="3" data-load-size="5" markdown="1">
 
 | Image Tags | <span class="nowrap">App Version</span> | OS | Published |

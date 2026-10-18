@@ -281,6 +281,99 @@ class MacroTests(unittest.TestCase):
         self.assertIn("\n### Prerelease\n", text)
         self.assertNotIn("\n### prerelease\n", text)
 
+    def test_outdated_track_version_comparison(self) -> None:
+        """Compare application versions numerically, ignoring image revisions."""
+        for stable, other, expected in (
+            ("6.4.4.10685", "6.4.4.10684", True),
+            ("6.4.4.10685", "6.4.4.10685", False),
+            ("6.4.4.10685", "6.4.4.10686", False),
+            ("1.10.0", "1.9.9", True),
+            ("1.9.9", "1.10.0", False),
+            ("1.2.3", "1.2.3.0", False),
+            ("1.2.3.0", "1.2.3", False),
+            ("1.2.3", "1.2.3-rc.1", True),
+            ("1.2.3", "1.2.4-rc.1", False),
+            ("1.2.3", "unknown", False),
+            ("unknown", "1.2.3", False),
+        ):
+            with self.subTest(stable=stable, other=other):
+                releases = [
+                    {"track": "stable", "version": stable, "revision": 0},
+                    {"track": "prerelease", "version": other, "revision": 99},
+                ]
+                notices = main.outdated_tracks(releases)
+                self.assertEqual("prerelease" in notices, expected)
+                self.assertNotIn("stable", notices)
+                if expected:
+                    self.assertEqual(
+                        notices["prerelease"],
+                        {"version": other, "stable_version": stable},
+                    )
+
+    def test_outdated_tracks_use_highest_version_not_latest_rebuild(self) -> None:
+        """Do not let newer rebuilds of older versions change the comparison."""
+        releases = [
+            {"track": "stable", "version": "1.0.0"},
+            {"track": "stable", "version": "2.0.0"},
+            {"track": "develop", "version": "1.9.0"},
+            {"track": "develop", "version": "1.0.0"},
+            {"track": "preview", "version": "2.1.0-rc.1"},
+            {"track": "older", "version": "1.5.0"},
+        ]
+        expected = {
+            "develop": {"version": "1.9.0", "stable_version": "2.0.0"},
+            "older": {"version": "1.5.0", "stable_version": "2.0.0"},
+        }
+        self.assertEqual(main.outdated_tracks(releases), expected)
+        self.assertEqual(main.outdated_tracks(list(reversed(releases))), expected)
+        self.assertEqual(main.outdated_tracks(releases[2:]), {})
+        self.assertEqual(main.outdated_tracks([]), {})
+
+    def test_outdated_track_admonitions(self) -> None:
+        """Warn above every older non-stable table, using verified releases only."""
+        item = copy.deepcopy(IMAGE)
+        # The normal preview is ahead of stable, so it needs no notice.
+        self.assertNotIn(
+            '!!! warning "Stable has a newer version"', render_versions(item)
+        )
+        stable = item["releases"][1]
+        for revision, track in enumerate(("develop", "prerelease", "older")):
+            release = {
+                **stable,
+                "track": track,
+                "version": "1.2.2",
+                "revision": revision,
+                "immutableTag": f"1.2.2-r{revision}",
+                "releaseTag": f"v1.2.2-r{revision}",
+            }
+            item["releases"].append(release)
+            item["tags"][release["immutableTag"]] = release["digest"]
+        item["releases"].append(
+            {
+                **stable,
+                "track": "develop",
+                "version": "99.0.0",
+                "immutableTag": "99.0.0-r0",
+                "releaseTag": "v99.0.0-r0",
+            }
+        )
+        text = render_versions(item)
+        self.assertEqual(text.count('!!! warning "Stable has a newer version"'), 3)
+        self.assertEqual(
+            text.count("version, `1.2.2`, is older than stable (`1.2.3`)"), 3
+        )
+        stable_section = text.split("\n### Stable\n")[1].split("\n### ")[0]
+        self.assertNotIn("!!! warning", stable_section)
+        for track in ("Develop", "Prerelease", "Older"):
+            section = text.split(f"\n### {track}\n")[1].split("\n### ")[0]
+            self.assertLess(
+                section.index("!!! warning"), section.index("| Image Tags |")
+            )
+        del item["tags"][stable["immutableTag"]]
+        self.assertNotIn(
+            '!!! warning "Stable has a newer version"', render_versions(item)
+        )
+
     def test_list_more_only_when_there_are_more_than_three_releases(self) -> None:
         """Render pagination controls only when releases exceed one page."""
         item = copy.deepcopy(IMAGE)

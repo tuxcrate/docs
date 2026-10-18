@@ -78,6 +78,10 @@ JavaScript enables changing the selected tag after the page loads.
 It also limits the table to the three newest releases initially; “List more” reveals
 five more at a time, keeping the button visible while more remain.
 Without JavaScript, all releases remain visible.
+Each non-stable track shows a warning when its highest verified application
+version is lower than stable's highest verified version. Comparisons use numeric
+version components, ignore image revisions and publication dates, and rank a
+stable version above its prerelease suffix. Equal or newer tracks show no warning.
 The data macro accepts short names resolving to `tuxcrate/<name>` as well as `owner/name`.
 
 Zensical's built-in macros plugin loads `macros/main.py` and renders the table during `build` or `serve`.
