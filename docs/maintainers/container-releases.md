@@ -180,6 +180,16 @@ Application versions may use three or four numeric components (`X.Y.Z` or `X.Y.Z
 Set `prerelease: true` on tracks whose upstream releases are prereleases despite having purely numeric versions.
 This flag is carried through the build matrix to release reservation and cannot be used to make a suffixed prerelease stable.
 Such tracks may only own named aliases like `develop` or `preview`, never `latest`, `stable`, or numeric series aliases.
+
+The planner skips tracks explicitly marked `prerelease: true` when any non-prerelease track has a higher application version, regardless of track names or order.
+This applies to both PR builds and production releases.
+Versions are compared numerically across all three or four components; a missing fourth component is treated as zero.
+A stable version is also newer than a suffixed prerelease with the same numeric components.
+For example, stable `6.4.4.10685` suppresses a prerelease track pinned to `6.4.4.10684`.
+Tracks with a prerelease suffix but no explicit `prerelease: true` are not filtered.
+Skipped tracks are still validated, including tag ownership; equal versions remain subject to the existing ownership checks.
+Existing images, tags, and releases are left unchanged.
+
 The APT and PyPI datasource restrictions below remain unchanged.
 Supported datasources are:
 
