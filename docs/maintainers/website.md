@@ -1,7 +1,7 @@
 # Website development
 
 The Tuxcrate website is built with Zensical.
-Its source lives in [`tuxcrate/website`](https://github.com/tuxcrate/website).
+Its source lives in [`tuxcrate/docs`](https://github.com/tuxcrate/docs).
 Run the commands below from the root of that repository.
 
 ## Image pages
@@ -109,7 +109,7 @@ task
 ```
 
 Open <http://localhost:8000>.
-The task uses Docker and reads the Zensical image from `.github/workflows/website.yml` so the preview stays in sync with CI.
+The task uses Docker and reads the Zensical image from `.github/workflows/docs.yml` so the preview stays in sync with CI.
 It uses offline fixtures for image versions, labeled as fictional test data, so no GitHub or registry access is needed.
 If set, `GH_TOKEN` and `GITHUB_TOKEN` are passed through to the container.
 
@@ -172,7 +172,8 @@ Before enabling deployment:
    A `403` from `ghcr.io/token` usually means it has not been published or anonymous pulls are disabled.
 3. Select GitHub Actions as the Pages source and allow the `github-pages` environment to deploy from `main`.
 4. Set `site_url` in `zensical.toml` once the canonical domain is chosen.
-5. Optionally configure `website-repository` and `website-token` in image callers for immediate refreshes.
+5. Optionally configure `docs-repository` and `docs-token` in image callers for immediate refreshes.
+   The callers map the `DOCS_TOKEN` repository secret to `docs-token`.
    The hourly refresh needs no cross-repository secret.
 
 If fetching data or building fails, the last successful deployment stays online.

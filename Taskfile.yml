@@ -2,7 +2,7 @@ version: '3'
 
 vars:
   ZENSICAL_IMAGE:
-    sh: grep -m 1 -oE 'zensical/zensical:[^[:space:]]+' .github/workflows/website.yml
+    sh: grep -m 1 -oE 'zensical/zensical:[^[:space:]]+' .github/workflows/docs.yml
 
 tasks:
   default:

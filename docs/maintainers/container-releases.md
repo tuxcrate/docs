@@ -48,7 +48,7 @@ Metadata can override these for individual tracks; the caller workflow stays the
 | Input | Default | Purpose |
 | --- | --- | --- |
 | `shared-ref` | `main` | Shared tooling ref; must match the workflow's `uses` ref |
-| `website-repository` | Empty | Optional `owner/repo` to notify with an `image-published` repository dispatch |
+| `docs-repository` | Empty | Optional `owner/repo` to notify with an `image-published` repository dispatch |
 
 For a pinned integration, use the same commit SHA in the workflow's `uses` and `shared-ref`.
 Both repositories must be accessible to the caller.
@@ -308,19 +308,20 @@ For immediate refreshes, optionally add this to the caller job:
 {% raw %}
 ```yaml
 with:
-  website-repository: tuxcrate/website
+  docs-repository: tuxcrate/docs
 secrets:
-  website-token: ${{ secrets.WEBSITE_TOKEN }}
+  docs-token: ${{ secrets.DOCS_TOKEN }}
 ```
 {% endraw %}
 
-Use a GitHub App installation token or fine-grained token with contents: write on the website repository only.
+Use a GitHub App installation token or fine-grained token with contents: write on the docs repository only.
+The caller's `DOCS_TOKEN` repository secret is passed as `docs-token`.
 The caller's `GITHUB_TOKEN` cannot dispatch to a different repository.
 Never pass the website token into builds or PR jobs.
 One notification is sent after all release tracks finish successfully; PR builds and failed releases do not notify.
 A missing token produces a warning.
 If the notification fails, the release still succeeds; the website refreshes on its hourly schedule.
-Configure `WEBSITE_TOKEN` as a repository secret, or an organization secret available to each caller.
+Configure `DOCS_TOKEN` as a repository secret, or an organization secret available to each caller.
 Without this optional token, the website still refreshes on its schedule or a manual run.
 
 ### Setup
