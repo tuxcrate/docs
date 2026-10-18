@@ -10,6 +10,8 @@ extra_css = ["stylesheets/containers.css"]
 extra_javascript = ["javascripts/container-tags.js"]
 
 [project.theme]
+logo = "assets/tuxcrate.svg"
+favicon = "assets/tuxcrate.svg"
 features = [
   "content.action.edit",
   "content.action.view",
