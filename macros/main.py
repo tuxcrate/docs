@@ -32,6 +32,7 @@ class MacroEnvironment(Protocol):
 
 TAG = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+CONTAINERS_DIR = Path(__file__).resolve().parents[1] / "docs/containers"
 ACCEPT_MANIFEST = (
     "application/vnd.oci.image.index.v1+json, "
     "application/vnd.oci.image.manifest.v1+json, "
@@ -358,9 +359,31 @@ def compose_yaml(configuration: Metadata) -> str:
     ).rstrip()
 
 
+def container_pages() -> list[Metadata]:
+    """Discover image pages and reuse their front matter for the container index."""
+    images = []
+    for path in CONTAINERS_DIR.rglob("*.md"):
+        text = path.read_text()
+        front_matter = re.match(r"\A---\r?\n(.*?)\r?\n---(?:\r?\n|\Z)", text, re.DOTALL)
+        if not front_matter:
+            continue
+        metadata = yaml.safe_load(front_matter[1])
+        if not isinstance(metadata, dict) or "container" not in metadata:
+            continue
+        images.append(
+            {
+                "title": metadata["title"],
+                "description": metadata["container"]["description"],
+                "url": quote(path.relative_to(CONTAINERS_DIR).as_posix(), safe="/"),
+            }
+        )
+    return sorted(images, key=lambda image: image["title"].casefold())
+
+
 def define_env(env: MacroEnvironment) -> None:
     """Register the container macro and rendering filters with Zensical."""
     env.macro(gh_image_versions_data)
+    env.macro(container_pages)
     env.filter(cell)
     env.filter(docker_run)
     env.filter(compose_yaml)

@@ -8,6 +8,7 @@ import json
 import os
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 from urllib.request import Request
@@ -63,11 +64,15 @@ class MacroTests(unittest.TestCase):
     """Check macro registration, version selection, and escaping."""
 
     def test_registration(self) -> None:
-        """Register the macro and all three rendering filters."""
+        """Register the macros and all three rendering filters."""
         env = Mock()
         main.define_env(env)
         self.assertEqual(
-            env.macro.call_args_list, [unittest.mock.call(main.gh_image_versions_data)]
+            env.macro.call_args_list,
+            [
+                unittest.mock.call(main.gh_image_versions_data),
+                unittest.mock.call(main.container_pages),
+            ],
         )
         self.assertEqual(
             env.filter.call_args_list,
@@ -77,6 +82,49 @@ class MacroTests(unittest.TestCase):
                 unittest.mock.call(main.compose_yaml),
             ],
         )
+
+    def test_container_pages_discovery(self) -> None:
+        """Discover nested image pages, sort titles, and ignore other Markdown."""
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "index.md").write_text("# Container images\n")
+            (root / "notes.md").write_text("---\ntitle: Notes\n---\n")
+            (root / "nested").mkdir()
+            for filename, title in (("z.md", "Zulu"), ("nested/a b.md", "alpha")):
+                (root / filename).write_text(
+                    yaml.safe_dump(
+                        {
+                            "title": title,
+                            "container": {"description": f"About {title}"},
+                        },
+                        explicit_start=True,
+                    )
+                    + "---\n"
+                )
+            with patch("macros.main.CONTAINERS_DIR", root):
+                images = main.container_pages()
+        self.assertEqual(
+            images,
+            [
+                {
+                    "title": "alpha",
+                    "description": "About alpha",
+                    "url": "nested/a%20b.md",
+                },
+                {"title": "Zulu", "description": "About Zulu", "url": "z.md"},
+            ],
+        )
+
+    def test_container_index(self) -> None:
+        """Render the real index using image metadata without network requests."""
+        env = template_environment()
+        env.globals["container_pages"] = main.container_pages
+        index = main.CONTAINERS_DIR / "index.md"
+        with patch("macros.main.request", side_effect=AssertionError("Network used")):
+            rendered = env.from_string(index.read_text()).render()
+        self.assertIn("| [gallery-dl](gallery-dl.md) | gallery-dl is", rendered)
+        self.assertIn("| [zrepl](zrepl.md) | zrepl is", rendered)
+        self.assertNotIn("{{", rendered)
 
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": str(FIXTURE)})
     @patch(
