@@ -38,10 +38,9 @@ Published releases are listed newest first, with all tags currently pointing to 
 {% if notice %}
 !!! warning "Stable has a newer version"
 
-{% if notice.prerelease %}
-    The stable version is newer than this "{{ track | cell }}" track. This image will no longer receive security updates.
-{% else %}
     This track's version (`{{ notice.version | cell }}`) is older than stable (`{{ notice.stable_version | cell }}`).
+{% if notice.prerelease %}
+    This image will no longer receive security updates.
 {% endif %}
 
 {% endif %}

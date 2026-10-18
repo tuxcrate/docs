@@ -345,10 +345,7 @@ class MacroTests(unittest.TestCase):
         """Do not infer build status from a track name or version suffix."""
         item = copy.deepcopy(IMAGE)
         stable = item["releases"][1]
-        message = (
-            'The stable version is newer than this "prerelease" track. '
-            "This image will no longer receive security updates."
-        )
+        message = "This image will no longer receive security updates."
         for version, flag, expected in (
             ("1.2.2", True, True),
             ("1.2.2", False, False),
@@ -408,7 +405,7 @@ class MacroTests(unittest.TestCase):
         text = render_versions(item)
         self.assertEqual(text.count('!!! warning "Stable has a newer version"'), 3)
         self.assertEqual(
-            text.count("version (`1.2.2`) is older than stable (`1.2.3`)"), 2
+            text.count("version (`1.2.2`) is older than stable (`1.2.3`)"), 3
         )
         stable_section = text.split("\n### Stable\n")[1].split("\n### ")[0]
         self.assertNotIn("!!! warning", stable_section)
@@ -418,10 +415,6 @@ class MacroTests(unittest.TestCase):
                 "This image will no longer receive security updates." in section,
                 track == "Develop",
             )
-            if track == "Develop":
-                self.assertIn(
-                    'The stable version is newer than this "develop" track.', section
-                )
             self.assertLess(
                 section.index("!!! warning"), section.index("| Image Tags |")
             )
