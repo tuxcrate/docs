@@ -21,8 +21,9 @@ from macros import main
 FIXTURE = Path(__file__).parent / "fixtures/images.json"
 SNAPSHOT = json.loads(FIXTURE.read_text())
 # Keep focused unit tests independent of the larger pagination preview fixture.
-IMAGE = {**SNAPSHOT["images"][0], "releases": SNAPSHOT["images"][0]["releases"][:2]}
 REPOSITORY = "tuxcrate/zrepl"
+IMAGE = next(item for item in SNAPSHOT["images"] if item["repository"] == REPOSITORY)
+IMAGE = {**IMAGE, "releases": IMAGE["releases"][:2]}
 
 
 def template_environment() -> Environment:
@@ -158,17 +159,20 @@ class MacroTests(unittest.TestCase):
 
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": ""})
     @patch("macros.main.collect")
-    def test_default_tag_matches_first_verified_release(self, collect: Mock) -> None:
-        """Select the newest verified tag or fall back to latest."""
+    def test_default_tag_prefers_verified_stable_release(self, collect: Mock) -> None:
+        """Prefer stable, then a verified prerelease, then latest."""
         item = copy.deepcopy(IMAGE)
-        for expected in ("2.0.0-rc.1-r0", "1.2.3-r1", "latest"):
+        for expected in ("1.2.3-r1", "2.0.0-rc.1-r0", "latest"):
             with self.subTest(expected=expected):
                 collect.reset_mock()
                 collect.return_value = item
                 versions = main.gh_image_versions_data(REPOSITORY)
                 collect.assert_called_once_with(REPOSITORY)
                 if expected != "latest":
-                    self.assertEqual(versions["releases"][0]["immutableTag"], expected)
+                    self.assertIn(
+                        expected,
+                        [release["immutableTag"] for release in versions["releases"]],
+                    )
                     self.assertIn(
                         f'data-container-tag="{expected}" aria-pressed="true"',
                         render_versions(item),
@@ -327,9 +331,9 @@ class MacroTests(unittest.TestCase):
             stable.count('data-container-image="ghcr.io/tuxcrate/zrepl"'), len(tags)
         )
         self.assertIn('data-container-tag="latest" aria-pressed="false"', stable)
-        self.assertIn('data-container-tag="1.2.3-r1" aria-pressed="false"', stable)
+        self.assertIn('data-container-tag="1.2.3-r1" aria-pressed="true"', stable)
         self.assertEqual(text.count('aria-pressed="true"'), 1)
-        self.assertIn('data-container-tag="2.0.0-rc.1-r0" aria-pressed="true"', text)
+        self.assertIn('data-container-tag="2.0.0-rc.1-r0" aria-pressed="false"', text)
         self.assertNotIn("[GHCR]", text)
 
     def test_escaping_and_empty_image(self) -> None:
@@ -521,7 +525,7 @@ class ContainerTemplateTests(unittest.TestCase):
                 main.compose_yaml(configuration)
 
     def test_container_pages_use_shared_layout(self) -> None:
-        """Render both container pages through the shared usage layout."""
+        """Render all container pages through the shared usage layout."""
         root = Path(__file__).resolve().parents[2]
         env = template_environment()
         versions = Mock(
@@ -538,7 +542,7 @@ class ContainerTemplateTests(unittest.TestCase):
             }
         )
         env.globals["gh_image_versions_data"] = versions
-        for name in ("gallery-dl", "zrepl"):
+        for name in ("gallery-dl", "zrepl", "sonarr"):
             with self.subTest(name=name):
                 versions.reset_mock()
                 source = (root / "docs/containers" / f"{name}.md").read_text()
@@ -548,8 +552,8 @@ class ContainerTemplateTests(unittest.TestCase):
                     "ghcr.io/" + metadata["container"]["repository"]
                 )
                 text = env.from_string(body).render(page={"meta": metadata})
-                self.assertIn(f"# {name}", text)
-                self.assertIn(f'!!! info "About {name}"', text)
+                self.assertIn(f"# {metadata['title']}", text)
+                self.assertIn(f'!!! info "About {metadata["title"]}"', text)
                 self.assertIn("    " + metadata["container"]["description"], text)
                 self.assertEqual(text.count("{ .md-button .container-link "), 3)
                 for button in ("upstream", "source", "registry"):
@@ -572,7 +576,7 @@ class ContainerTemplateTests(unittest.TestCase):
                 self.assertEqual(text.count(f"ghcr.io/tuxcrate/{name}:0.7.0-r5"), 2)
                 self.assertNotIn(f"ghcr.io/tuxcrate/{name}:latest", text)
                 self.assertIn("| Image Tags | App Version | OS | Published |", text)
-                self.assertNotIn("| Track |", text)
+                self.assertNotIn("| Image Tags | Track |", text)
                 self.assertNotIn("No image has been published yet", text)
                 if name == "zrepl":
                     self.assertIn("--privileged", metadata["container"]["docker_run"])
@@ -606,7 +610,10 @@ class ContainerTemplateTests(unittest.TestCase):
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": str(FIXTURE)})
     def test_preview_fixture_has_paginated_stable_tables(self) -> None:
         """Keep enough valid dummy releases to exercise two load-more clicks."""
-        for item in SNAPSHOT["images"]:
+        for item in (
+            item for item in SNAPSHOT["images"]
+            if item["repository"] in (REPOSITORY, "tuxcrate/gallery-dl")
+        ):
             with self.subTest(repository=item["repository"]):
                 for release in item["releases"]:
                     main.validate_release(release, item["image"], release["releaseTag"])
@@ -644,8 +651,8 @@ class ContainerTemplateTests(unittest.TestCase):
         _, front_matter, body = source.split("---", 2)
         metadata = yaml.safe_load(front_matter)
         text = env.from_string(body).render(page={"meta": metadata})
-        self.assertIn('data-container-tag="2.0.0-rc.1-r0" aria-pressed="true"', text)
-        self.assertEqual(text.count("ghcr.io/tuxcrate/zrepl:2.0.0-rc.1-r0"), 2)
+        self.assertIn('data-container-tag="1.2.3-r1" aria-pressed="true"', text)
+        self.assertEqual(text.count("ghcr.io/tuxcrate/zrepl:1.2.3-r1"), 2)
         self.assertNotIn("ghcr.io/tuxcrate/zrepl:latest", text)
         self.assertIn("fictional test data", text)
         self.assertIn("| Image Tags | App Version | OS | Published |", text)
@@ -654,6 +661,30 @@ class ContainerTemplateTests(unittest.TestCase):
         self.assertNotIn("v1.0.0-r0", text)
         self.assertNotIn("sha256:", text)
         request.assert_not_called()
+
+
+    @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": str(FIXTURE)})
+    def test_sonarr_tracks_default_to_stable(self) -> None:
+        """Render numeric prereleases without selecting one by default."""
+        item = next(
+            item for item in SNAPSHOT["images"]
+            if item["repository"] == "tuxcrate/sonarr"
+        )
+        for release in item["releases"]:
+            main.validate_release(release, item["image"], release["releaseTag"])
+        self.assertEqual(item["tags"]["latest"], item["tags"]["4.0.20.3014-r0"])
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "docs/containers/sonarr.md").read_text()
+        _, front_matter, body = source.split("---", 2)
+        text = template_environment().from_string(body).render(
+            page={"meta": yaml.safe_load(front_matter)}
+        )
+        self.assertIn("### develop", text)
+        self.assertIn('data-container-tag="4.0.20.3014-r0" aria-pressed="true"', text)
+        self.assertIn('data-container-tag="5.0.0.2668-r0" aria-pressed="false"', text)
+        self.assertEqual(text.count("ghcr.io/tuxcrate/sonarr:4.0.20.3014-r0"), 2)
+        self.assertIn("read_only: true", text)
+        self.assertIn("--cap-drop=ALL", text)
 
 
 class SourceTests(unittest.TestCase):

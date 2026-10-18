@@ -16,7 +16,9 @@
 ## Published versions
 
 {% set versions = gh_image_versions_data(container.repository) %}
-{% set default_tag = versions.releases[0].immutableTag if versions.releases else "latest" %}
+{% set stable_releases = versions.releases | selectattr('track', 'equalto', 'stable') | list %}
+{% set default_releases = stable_releases if stable_releases else versions.releases %}
+{% set default_tag = default_releases[0].immutableTag if default_releases else "latest" %}
 {% if versions.preview %}
 **Preview only — fictional test data.**
 {% endif %}
