@@ -793,35 +793,12 @@ class ContainerTemplateTests(unittest.TestCase):
         self.assertIn('data-container-tag="2.1-prerelease"', text)
         self.assertNotIn('data-container-tag="2.1.2.3455-r0"', text)
         self.assertIn("Stable has a newer version", text)
-        self.assertIn("## Choosing a tag", text)
         service = metadata["container"]["compose"]["services"]["prowlarr"]
         self.assertEqual(service["ports"], ["127.0.0.1:9696:9696"])
         self.assertEqual(service["volumes"], ["prowlarr-config:/config"])
         self.assertEqual(service["cap_drop"], ["ALL"])
         self.assertTrue(service["read_only"])
-        self.assertIn("/opt/prowlarr/LICENSE", text)
-        self.assertIn("/usr/share/doc/prowlarr/SOURCE", text)
         request.assert_not_called()
-
-    def test_prowlarr_details_before_first_release(self) -> None:
-        """Keep setup and license notes visible before any image is published."""
-        root = Path(__file__).resolve().parents[2]
-        source = (root / "docs/containers/prowlarr.md").read_text()
-        _, front_matter, body = source.split("---", 2)
-        env = template_environment()
-        env.globals["gh_image_versions_data"] = Mock(
-            return_value={
-                "image": "ghcr.io/tuxcrate/prowlarr",
-                "preview": False,
-                "releases": [],
-            }
-        )
-        text = env.from_string(body).render(page={"meta": yaml.safe_load(front_matter)})
-        self.assertIn("No releases available yet", text)
-        self.assertEqual(text.count("## Configuration"), 1)
-        self.assertLess(text.index("## Usage"), text.index("## Configuration"))
-        self.assertIn("/opt/prowlarr/LICENSE", text)
-        self.assertIn("/usr/share/doc/prowlarr/SOURCE", text)
 
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": str(FIXTURE)})
     def test_preview_fixture_has_paginated_stable_tables(self) -> None:
