@@ -84,6 +84,12 @@ The current setup assumes this shared repository is public.
 - Stale default-branch runs fail before reserving a revision, preventing aliases from moving backwards.
   Start a fresh run on the current branch HEAD.
 - Each release includes a versioned `release.json` asset with the image, track, application version, revision, digest, source commit, platforms, and historical aliases.
+  It also includes `os_flavor` (such as `alpine` or `debian`) and `os_version`, read from the final image by digest on the first declared platform, not inferred from the base image tag.
+  These use `ID` and `VERSION_ID` from `/etc/os-release` (falling back to `/usr/lib/os-release`); Debian uses `/etc/debian_version` when available to include the point release, such as `13.7`.
+  The image's entrypoint is not run. Missing or invalid OS identifiers fail metadata generation rather than publishing guessed values.
+  PR builds generate a temporary, synthetic `release.json` using the same metadata generation and validation as real releases, including for fork PRs that cannot publish images.
+  Validation checks all required fields, including OS metadata from a locally loaded image of the first declared platform. Empty or invalid required values fail the job.
+  This fixture uses revision `r0` and the local image ID as its digest. It stays in the runner's temporary directory and does not reserve a revision, create a GitHub release, or publish release tags.
   The GitHub release's `published_at` is the authoritative publication timestamp.
   Draft assets are not published versions.
 - Prerelease versions create GitHub prereleases and never become GitHub's latest release.
@@ -122,6 +128,7 @@ Preview builds retain uncached multiarch smoke tests, provenance, and SBOMs, but
 Preview tags are not removed automatically when a PR closes; manage retention separately.
 
 After a successful push, the workflow posts pull commands, the tested merge commit, platforms, image digest, and a build link in the PR.
+The same comment includes the generated `release.json` in a collapsed section labeled as synthetic validation metadata, with a note that its revision and digest are placeholders.
 Subsequent builds update the same bot-authored comment for each track.
 Fork PRs do not receive image comments because they do not publish images.
 
