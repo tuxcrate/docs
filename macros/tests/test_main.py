@@ -564,6 +564,11 @@ class ContainerTemplateTests(unittest.TestCase):
                 self.assertEqual(text.count("{ .md-button .container-link "), 3)
                 for button in ("upstream", "source", "registry"):
                     self.assertIn(f".container-link--{button}", text)
+                self.assertIn(
+                    f"[:lucide-package: GHCR](https://github.com/tuxcrate/{name}"
+                    f"/pkgs/container/{name})",
+                    text,
+                )
                 self.assertIn('=== ":lucide-terminal: CLI"', text)
                 self.assertIn('=== ":simple-docker: Compose"', text)
                 self.assertIn('```sh linenums="1"', text)

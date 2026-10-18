@@ -1,7 +1,7 @@
 # {{ page.meta.title }}
 
 {% set container = page.meta.container %}
-{% set registry_url = "https://github.com/orgs/" ~ container.repository.split('/')[0] ~ "/packages/container/package/" ~ container.repository.split('/')[1] %}
+{% set registry_url = "https://github.com/" ~ container.repository ~ "/pkgs/container/" ~ container.repository.split('/')[1] %}
 {% set releases_url = "https://github.com/" ~ container.repository ~ "/releases" %}
 [:lucide-external-link: Upstream]({{ container.upstream }}){ .md-button .container-link .container-link--upstream }
 [:simple-github: Container source](https://github.com/{{ container.repository }}){ .md-button .container-link .container-link--source }
