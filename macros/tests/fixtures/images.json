@@ -2,6 +2,56 @@
   "refreshedAt": "2026-10-17T12:00:00+00:00",
   "images": [
     {
+      "repository": "tuxcrate/prowlarr",
+      "image": "ghcr.io/tuxcrate/prowlarr",
+      "releases": [
+        {
+          "schemaVersion": 2,
+          "image": "ghcr.io/tuxcrate/prowlarr",
+          "track": "prerelease",
+          "prerelease": true,
+          "version": "2.1.2.3455",
+          "imageVersion": "2.1.2.3455-prerelease",
+          "revision": 0,
+          "immutableTag": "2.1.2.3455-prerelease-r0",
+          "digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "aliasesAtPublication": ["2.1.2.3455-prerelease", "2-prerelease", "2.1-prerelease"],
+          "platforms": ["linux/amd64", "linux/arm64"],
+          "os_flavor": "alpine",
+          "os_version": "3.24.2",
+          "releaseTag": "v2.1.2.3455-prerelease-r0",
+          "publishedAt": "2026-10-18T12:00:00Z"
+        },
+        {
+          "schemaVersion": 2,
+          "image": "ghcr.io/tuxcrate/prowlarr",
+          "track": "stable",
+          "version": "2.1.2.3456",
+          "imageVersion": "2.1.2.3456",
+          "revision": 0,
+          "immutableTag": "2.1.2.3456-r0",
+          "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "aliasesAtPublication": ["2.1.2.3456", "2", "2.1", "latest"],
+          "platforms": ["linux/amd64", "linux/arm64"],
+          "os_flavor": "alpine",
+          "os_version": "3.24.2",
+          "releaseTag": "v2.1.2.3456-r0",
+          "publishedAt": "2026-10-17T12:00:00Z"
+        }
+      ],
+      "tags": {
+        "2.1.2.3455-prerelease-r0": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "2.1.2.3455-prerelease": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "2-prerelease": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "2.1-prerelease": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "2.1.2.3456-r0": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "2.1.2.3456": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "2": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "2.1": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "latest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    },
+    {
       "repository": "tuxcrate/radarr",
       "image": "ghcr.io/tuxcrate/radarr",
       "releases": [

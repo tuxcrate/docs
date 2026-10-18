@@ -696,7 +696,7 @@ class ContainerTemplateTests(unittest.TestCase):
             }
         )
         env.globals["gh_image_versions_data"] = versions
-        for name in ("gallery-dl", "zrepl", "sonarr"):
+        for name in ("gallery-dl", "zrepl", "sonarr", "prowlarr"):
             with self.subTest(name=name):
                 versions.reset_mock()
                 source = (root / "docs/containers" / f"{name}.md").read_text()
@@ -771,6 +771,33 @@ class ContainerTemplateTests(unittest.TestCase):
             text,
         )
         self.assertEqual(text.count("ghcr.io/tuxcrate/gallery-dl:1.2.3-r0"), 2)
+        request.assert_not_called()
+
+    @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": str(FIXTURE)})
+    @patch(
+        "macros.main.request",
+        side_effect=AssertionError("Offline preview used the network"),
+    )
+    def test_prowlarr_offline_page(self, request: Mock) -> None:
+        """Render Prowlarr's fictional release and persistent configuration."""
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "docs/containers/prowlarr.md").read_text()
+        _, front_matter, body = source.split("---", 2)
+        metadata = yaml.safe_load(front_matter)
+        text = template_environment().from_string(body).render(page={"meta": metadata})
+        self.assertIn("fictional test data", text)
+        self.assertEqual(text.count("ghcr.io/tuxcrate/prowlarr:2.1.2.3456-r0"), 2)
+        self.assertNotIn("ghcr.io/tuxcrate/prowlarr:latest", text)
+        self.assertIn('data-container-tag="2.1.2.3455-prerelease-r0"', text)
+        self.assertIn('data-container-tag="2-prerelease"', text)
+        self.assertIn('data-container-tag="2.1-prerelease"', text)
+        self.assertNotIn('data-container-tag="2.1.2.3455-r0"', text)
+        self.assertIn("Stable has a newer version", text)
+        service = metadata["container"]["compose"]["services"]["prowlarr"]
+        self.assertEqual(service["ports"], ["127.0.0.1:9696:9696"])
+        self.assertEqual(service["volumes"], ["prowlarr-config:/config"])
+        self.assertEqual(service["cap_drop"], ["ALL"])
+        self.assertTrue(service["read_only"])
         request.assert_not_called()
 
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": str(FIXTURE)})
