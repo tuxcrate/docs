@@ -362,6 +362,13 @@ class MacroTests(unittest.TestCase):
         self.assertEqual(
             text.count("version, `1.2.2`, is older than stable (`1.2.3`)"), 3
         )
+        self.assertEqual(
+            text.count(
+                "If this track is marked `prerelease: true`, it is no longer built "
+                "while stable has a higher version. Existing images remain available."
+            ),
+            3,
+        )
         stable_section = text.split("\n### Stable\n")[1].split("\n### ")[0]
         self.assertNotIn("!!! warning", stable_section)
         for track in ("Develop", "Prerelease", "Older"):

@@ -39,6 +39,7 @@ Published releases are listed newest first, with all tags currently pointing to 
 !!! warning "Stable has a newer version"
 
     This track's newest application version, `{{ notice.version | cell }}`, is older than stable (`{{ notice.stable_version | cell }}`).
+    If this track is marked `prerelease: true`, it is no longer built while stable has a higher version. Existing images remain available.
 
 {% endif %}
 <div class="container-versions" data-page-size="3" data-load-size="5" markdown="1">
