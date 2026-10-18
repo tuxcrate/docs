@@ -97,6 +97,14 @@ corresponding source archive used for that build.
 This image follows Radarr's stable `master` releases. `latest`, the major tag,
 and the major/minor tag follow the current stable image. The exact application
 version follows rebuilds of that version; use an immutable `-rN` revision tag
-from the version table when you need a fixed release. There is no prerelease
-track.
+from the version table when you need a fixed release.
+
+The prerelease track follows upstream GitHub prereleases with `develop` assets.
+Choose a major or major/minor prerelease tag, such as `6-prerelease` or
+`6.4-prerelease`, from the version table. These never move `latest` or the
+stable numeric tags. A develop release can have a lower version number than
+the latest stable release immediately after a stable promotion.
+
+Back up `/config` before switching tracks. Prereleases may migrate the database;
+switching back to stable can require restoring that backup.
 {% endblock %}
