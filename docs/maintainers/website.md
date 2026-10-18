@@ -83,8 +83,8 @@ version is lower than stable's highest verified version. Comparisons use numeric
 version components, ignore image revisions and publication dates, and rank a
 stable version above its prerelease suffix. Equal or newer tracks show no warning.
 If the release representing that highest version is marked as a prerelease in
-GitHub, the warning also says that the track is no longer built and existing images
-remain available. This uses the GitHub release's `prerelease` flag, not the track
+GitHub, the warning names the track and says that its image will no longer receive
+security updates. This uses the GitHub release's `prerelease` flag, not the track
 name or version suffix; `release.json` does not currently contain that flag.
 The data macro accepts short names resolving to `tuxcrate/<name>` as well as `owner/name`.
 

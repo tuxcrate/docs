@@ -346,8 +346,8 @@ class MacroTests(unittest.TestCase):
         item = copy.deepcopy(IMAGE)
         stable = item["releases"][1]
         message = (
-            "This prerelease track is no longer built. "
-            "Existing images remain available."
+            'The stable version is newer than this "prerelease" track. '
+            "This image will no longer receive security updates."
         )
         for version, flag, expected in (
             ("1.2.2", True, True),
@@ -408,16 +408,20 @@ class MacroTests(unittest.TestCase):
         text = render_versions(item)
         self.assertEqual(text.count('!!! warning "Stable has a newer version"'), 3)
         self.assertEqual(
-            text.count("version, `1.2.2`, is older than stable (`1.2.3`)"), 3
+            text.count("version, `1.2.2`, is older than stable (`1.2.3`)"), 2
         )
         stable_section = text.split("\n### Stable\n")[1].split("\n### ")[0]
         self.assertNotIn("!!! warning", stable_section)
         for track in ("Develop", "Prerelease", "Older"):
             section = text.split(f"\n### {track}\n")[1].split("\n### ")[0]
-            self.assertEqual("no longer built" in section, track == "Develop")
             self.assertEqual(
-                "Existing images remain available" in section, track == "Develop"
+                "This image will no longer receive security updates." in section,
+                track == "Develop",
             )
+            if track == "Develop":
+                self.assertIn(
+                    'The stable version is newer than this "develop" track.', section
+                )
             self.assertLess(
                 section.index("!!! warning"), section.index("| Image Tags |")
             )
