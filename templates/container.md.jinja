@@ -41,7 +41,7 @@ Published releases are listed newest first, with all tags currently pointing to 
 {% if notice.prerelease %}
     The stable version is newer than this "{{ track | cell }}" track. This image will no longer receive security updates.
 {% else %}
-    This track's newest application version, `{{ notice.version | cell }}`, is older than stable (`{{ notice.stable_version | cell }}`).
+    This track's version (`{{ notice.version | cell }}`) is older than stable (`{{ notice.stable_version | cell }}`).
 {% endif %}
 
 {% endif %}

@@ -408,7 +408,7 @@ class MacroTests(unittest.TestCase):
         text = render_versions(item)
         self.assertEqual(text.count('!!! warning "Stable has a newer version"'), 3)
         self.assertEqual(
-            text.count("version, `1.2.2`, is older than stable (`1.2.3`)"), 2
+            text.count("version (`1.2.2`) is older than stable (`1.2.3`)"), 2
         )
         stable_section = text.split("\n### Stable\n")[1].split("\n### ")[0]
         self.assertNotIn("!!! warning", stable_section)
