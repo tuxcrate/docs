@@ -90,3 +90,17 @@ test("handles short lists and initializes newly navigated pages independently", 
   assert.equal(next.more.hidden, false);
   assert.equal(lists[3].more.hidden, true);
 });
+
+test("paginates track tables independently", () => {
+  const stable = versionList(9);
+  const preview = versionList(4);
+  const page = setup([stable, preview]);
+  page.clickMore(stable);
+  assert.equal(stable.rows.filter((row) => !row.hidden).length, 8);
+  assert.equal(preview.rows.filter((row) => !row.hidden).length, 3);
+  assert.equal(preview.more.hidden, false);
+  page.clickMore(preview);
+  assert.equal(preview.rows.filter((row) => !row.hidden).length, 4);
+  assert.equal(preview.more.hidden, true);
+  assert.equal(stable.more.hidden, false);
+});

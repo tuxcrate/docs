@@ -24,19 +24,28 @@
 Published releases are listed newest first, with all tags currently pointing to each image.
 
 {% if versions.releases %}
+{% set tracks = versions.releases | map(attribute='track') | unique | sort %}
+{% if 'stable' in tracks %}
+{% set tracks = ['stable'] + (tracks | reject('equalto', 'stable') | list) %}
+{% endif %}
+{% for track in tracks %}
+{% set releases = versions.releases | selectattr('track', 'equalto', track) | list %}
+### {{ track | cell }}
+
 <div class="container-versions" data-page-size="3" data-load-size="5" markdown="1">
 
-| Track | Image Tags | App Version | Published |
+| Image Tags | App Version | OS | Published |
 | --- | --- | --- | --- |
-{% for release in versions.releases -%}
-| {{ release.track | cell }} | {% for tag in release.tags %}<button type="button" class="container-tag" data-container-image="{{ versions.image | cell }}" data-container-tag="{{ tag | cell }}" aria-pressed="{{ 'true' if tag == default_tag else 'false' }}"><code>{{ tag | cell }}</code></button>{% if not loop.last %} {% endif %}{% endfor %} | <code>{{ release.version | cell }}</code> | [{{ release.publishedAt[:16] | replace('T', ' ') | cell }}]({{ releases_url }}/tag/{{ release.releaseTag | urlencode }}) |
+{% for release in releases -%}
+| {% for tag in release.tags %}<button type="button" class="container-tag" data-container-image="{{ versions.image | cell }}" data-container-tag="{{ tag | cell }}" aria-pressed="{{ 'true' if tag == default_tag else 'false' }}"><code>{{ tag | cell }}</code></button>{% if not loop.last %} {% endif %}{% endfor %} | <code>{{ release.version | cell }}</code> | {% if release.get('os_flavor') and release.get('os_version') %}{{ release.os_flavor | title | cell }}/{{ release.os_version | cell }}{% else %}—{% endif %} | [{{ release.publishedAt[:16] | replace('T', ' ') | cell }}]({{ releases_url }}/tag/{{ release.releaseTag | urlencode }}) |
 {% endfor %}
 
-{% if versions.releases | length > 3 %}
+{% if releases | length > 3 %}
 <button type="button" class="md-button container-versions-more" hidden>List more</button>
 {% endif %}
 
 </div>
+{% endfor %}
 {% else %}
 No published images with matching release metadata are available yet.
 {% endif %}

@@ -19,7 +19,8 @@ from macros import main
 
 FIXTURE = Path(__file__).parent / "fixtures/images.json"
 SNAPSHOT = json.loads(FIXTURE.read_text())
-IMAGE = SNAPSHOT["images"][0]
+# Keep focused unit tests independent of the larger pagination preview fixture.
+IMAGE = {**SNAPSHOT["images"][0], "releases": SNAPSHOT["images"][0]["releases"][:2]}
 REPOSITORY = "tuxcrate/zrepl"
 
 
@@ -89,7 +90,8 @@ class MacroTests(unittest.TestCase):
         self.assertTrue(data["preview"])
         self.assertEqual(data["image"], IMAGE["image"])
         self.assertEqual(
-            [release["track"] for release in data["releases"]], ["preview", "stable"]
+            [release["track"] for release in data["releases"][:2]],
+            ["preview", "stable"],
         )
         self.assertNotIn("markdown", data)
         request.assert_not_called()
@@ -159,10 +161,10 @@ class MacroTests(unittest.TestCase):
         item["tags"]["custom"] = IMAGE["releases"][1]["digest"]
         text = render_versions(item)
         stable = next(
-            line for line in text.splitlines() if line.startswith("| stable |")
+            line for line in text.splitlines() if "/tag/v1.2.3-r1)" in line
         )
         preview = next(
-            line for line in text.splitlines() if line.startswith("| preview |")
+            line for line in text.splitlines() if "/tag/v2.0.0-rc.1-r0)" in line
         )
         self.assertIn("<code>1.2.3-r1</code>", stable)
         self.assertIn("<code>custom</code>", stable)
@@ -184,14 +186,34 @@ class MacroTests(unittest.TestCase):
         item["releases"].insert(0, older)  # Selection must not depend on input order.
         item["tags"][older["immutableTag"]] = older["digest"]
         text = render_versions(item)
-        self.assertEqual(text.count("| stable |"), 2)
-        self.assertEqual(text.count("| preview |"), 1)
+        self.assertEqual(text.count("\n### stable\n"), 1)
+        self.assertEqual(text.count("\n### preview\n"), 1)
+        self.assertEqual(text.count("| Image Tags | App Version | OS | Published |"), 2)
+        self.assertNotIn("| Track |", text)
+        self.assertLess(text.index("\n### stable\n"), text.index("\n### preview\n"))
+        stable, preview = text.split("\n### stable\n")[1].split("\n### preview\n")
+        self.assertEqual(preview.count("| <button"), 1)
+        self.assertEqual(stable.count("| <button"), 2)
         self.assertIn('data-container-tag="1.2.3-r1"', text)
         self.assertIn('data-container-tag="1.2.3-r0"', text)
         self.assertIn("/releases/tag/v1.2.3-r0", text)
-        self.assertLess(text.index("/tag/v2.0.0-rc.1-r0"), text.index("/tag/v1.2.3-r1"))
         self.assertLess(text.index("/tag/v1.2.3-r1"), text.index("/tag/v1.2.3-r0"))
         self.assertNotIn("container-versions-more", text)
+
+    def test_tracks_are_sorted_alphabetically(self) -> None:
+        """Sort track tables independently of release publication order."""
+        item = copy.deepcopy(IMAGE)
+        item["releases"][0]["track"] = "z-preview"
+        item["releases"][1]["track"] = "a-stable"
+        text = render_versions(item)
+        self.assertLess(text.index("\n### a-stable\n"), text.index("\n### z-preview\n"))
+
+    def test_stable_track_is_first(self) -> None:
+        """Place stable before other tracks, even those earlier alphabetically."""
+        item = copy.deepcopy(IMAGE)
+        item["releases"][0]["track"] = "alpha"
+        text = render_versions(item)
+        self.assertLess(text.index("\n### stable\n"), text.index("\n### alpha\n"))
 
     def test_list_more_only_when_there_are_more_than_three_releases(self) -> None:
         """Render pagination controls only when releases exceed one page."""
@@ -212,8 +234,11 @@ class MacroTests(unittest.TestCase):
         self.assertIn(
             'class="md-button container-versions-more" hidden>List more</button>', text
         )
-        self.assertEqual(text.count("| stable |"), 5)
-        self.assertEqual(text.count("| preview |"), 1)
+        stable, preview = text.split("\n### stable\n")[1].split("\n### preview\n")
+        self.assertEqual(stable.count("| <button"), 5)
+        self.assertEqual(preview.count("| <button"), 1)
+        self.assertEqual(stable.count("container-versions-more"), 1)
+        self.assertNotIn("container-versions-more", preview)
         # All rows are present for no-JavaScript access; JavaScript paginates them.
         self.assertIn("/tag/v1.0.0-r0", text)
         self.assertNotIn("container-versions-more", render_versions(IMAGE))
@@ -229,8 +254,8 @@ class MacroTests(unittest.TestCase):
                     item["tags"]["1.2.3-r1"] = digest
                 text = render_versions(item)
                 self.assertNotIn("/releases/tag/v1.2.3-r1", text)
-                self.assertNotIn("| stable |", text)
-                self.assertIn("| preview |", text)
+                self.assertNotIn("\n### stable\n", text)
+                self.assertIn("\n### preview\n", text)
 
     def test_tag_buttons_and_published_release_links(self) -> None:
         """Render ordered tag buttons and links to their published releases."""
@@ -244,7 +269,7 @@ class MacroTests(unittest.TestCase):
             text,
         )
         stable = next(
-            line for line in text.splitlines() if line.startswith("| stable |")
+            line for line in text.splitlines() if "/tag/v1.2.3-r1)" in line
         )
         tags = ["1.2.3-r1", "1.2.3", "1.2", "latest", "stable"]
         positions = [stable.index(f'data-container-tag="{tag}"') for tag in tags]
@@ -271,11 +296,42 @@ class MacroTests(unittest.TestCase):
         )
         self.assertNotIn("| Track |", text)
 
+    def test_os_column_formats_release_metadata(self) -> None:
+        """Title-case the OS flavor and append the OS version."""
+        for flavor, version, expected in (
+            ("debian", "13.7", "Debian/13.7"),
+            ("alpine", "3.22", "Alpine/3.22"),
+            ("openSUSE", "16.0", "Opensuse/16.0"),
+        ):
+            with self.subTest(flavor=flavor):
+                item = copy.deepcopy(IMAGE)
+                item["releases"][0].update(os_flavor=flavor, os_version=version)
+                text = render_versions(item)
+                self.assertIn(f"| {expected} |", text)
+                self.assertIn("| <code>1.2.3</code> | — |", text)
+
+    def test_os_column_handles_missing_metadata(self) -> None:
+        """Keep older releases visible when OS metadata is absent or incomplete."""
+        for fields in (
+            {},
+            {"os_flavor": "debian"},
+            {"os_version": "13.7"},
+            {"os_flavor": "", "os_version": "13.7"},
+            {"os_flavor": "debian", "os_version": None},
+        ):
+            with self.subTest(fields=fields):
+                item = copy.deepcopy(IMAGE)
+                item["releases"][0].update(fields)
+                text = render_versions(item)
+                self.assertIn("| <code>2.0.0-rc.1</code> | — |", text)
+
     def test_template_escapes_table_values(self) -> None:
         """Prevent release metadata from injecting HTML or table syntax."""
         item = copy.deepcopy(IMAGE)
         item["releases"][0]["track"] = "<script>|`[x]\n"
         item["releases"][0]["version"] = '<img src=x onerror="alert(1)">'
+        item["releases"][0]["os_flavor"] = "<script>|"
+        item["releases"][0]["os_version"] = "<img>|"
         text = render_versions(item)
         self.assertIn("&lt;script&gt;&#124;&#96;&#91;x&#93; ", text)
         self.assertIn(
@@ -283,6 +339,7 @@ class MacroTests(unittest.TestCase):
         )
         self.assertNotIn("<script>", text)
         self.assertNotIn("<img ", text)
+        self.assertIn("| &lt;Script&gt;&#124;/&lt;img&gt;&#124; |", text)
 
 
 class ContainerTemplateTests(unittest.TestCase):
@@ -466,7 +523,8 @@ class ContainerTemplateTests(unittest.TestCase):
                 versions.assert_called_once_with(f"tuxcrate/{name}")
                 self.assertEqual(text.count(f"ghcr.io/tuxcrate/{name}:0.7.0-r5"), 2)
                 self.assertNotIn(f"ghcr.io/tuxcrate/{name}:latest", text)
-                self.assertIn("| Track | Image Tags | App Version | Published |", text)
+                self.assertIn("| Image Tags | App Version | OS | Published |", text)
+                self.assertNotIn("| Track |", text)
                 self.assertNotIn("No image has been published yet", text)
                 if name == "zrepl":
                     self.assertIn("--privileged", metadata["container"]["docker_run"])
@@ -493,9 +551,35 @@ class ContainerTemplateTests(unittest.TestCase):
             .render(page={"meta": yaml.safe_load(front_matter)})
         )
         self.assertIn("fictional test data", text)
-        self.assertIn("| Track | Image Tags | App Version | Published |", text)
+        self.assertIn("| Image Tags | App Version | OS | Published |", text)
         self.assertEqual(text.count("ghcr.io/tuxcrate/gallery-dl:1.2.3-r0"), 2)
         request.assert_not_called()
+
+    @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": str(FIXTURE)})
+    def test_preview_fixture_has_paginated_stable_tables(self) -> None:
+        """Keep enough valid dummy releases to exercise two load-more clicks."""
+        for item in SNAPSHOT["images"]:
+            with self.subTest(repository=item["repository"]):
+                for release in item["releases"]:
+                    main.validate_release(release, item["image"], release["releaseTag"])
+                versions = main.gh_image_versions_data(item["repository"])
+                stable = [
+                    release
+                    for release in versions["releases"]
+                    if release["track"] == "stable"
+                ]
+                self.assertGreaterEqual(len(stable), 10)
+                text = render_versions(item)
+                table = text.split("\n### stable\n")[1].split("</div>")[0]
+                self.assertEqual(table.count("| <button"), len(stable))
+                self.assertIn("container-versions-more", table)
+                self.assertIn("| — |", table)
+                self.assertIn(
+                    "| Debian/13.7 |"
+                    if item["repository"] == REPOSITORY
+                    else "| Alpine/3.22.2 |",
+                    table,
+                )
 
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": str(FIXTURE)})
     @patch(
@@ -516,8 +600,8 @@ class ContainerTemplateTests(unittest.TestCase):
         self.assertEqual(text.count("ghcr.io/tuxcrate/zrepl:2.0.0-rc.1-r0"), 2)
         self.assertNotIn("ghcr.io/tuxcrate/zrepl:latest", text)
         self.assertIn("fictional test data", text)
-        self.assertIn("| Track | Image Tags | App Version | Published |", text)
-        self.assertIn("| <code>1.2.3</code> | [2026-10-16 11:00]", text)
+        self.assertIn("| Image Tags | App Version | OS | Published |", text)
+        self.assertIn("| <code>1.2.3</code> | — | [2026-10-16 11:00]", text)
         self.assertNotIn("<code>manual</code>", text)
         self.assertNotIn("v1.0.0-r0", text)
         self.assertNotIn("sha256:", text)
