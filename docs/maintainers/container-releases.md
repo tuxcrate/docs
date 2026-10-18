@@ -153,7 +153,7 @@ Add a separate `.github/workflows/container-pr-cleanup.yml` to each image reposi
 name: Clean up container PR previews
 
 on:
-  pull_request_target:
+  pull_request:
     types: [closed]
   schedule:
     - cron: '41 3 * * *'
@@ -169,6 +169,7 @@ permissions:
 
 jobs:
   cleanup:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       packages: write
@@ -183,7 +184,7 @@ Publish the shared workflow and tooling before enabling callers.
 For a pinned caller, set `with.shared-ref` to the same ref as `uses`.
 Install the caller on the default branch so closed-PR events and scheduled sweeps can run.
 
-The close event covers both merged and unmerged PRs.
+The close event covers both merged and unmerged same-repository PRs; fork close events are skipped because forks do not publish previews.
 Every run checks current PR state through the API and scans all historical preview tracks and commits, including tracks no longer in `meta.yaml`.
 The daily schedule catches older closed PRs, missed events, and previews left by late builds.
 Manual runs default to dry-run mode; inspect their logs before disabling it to perform deletion.
@@ -198,6 +199,7 @@ Cleanup is limited to `ghcr.io/<caller repository>-pr`, even when production use
 It deletes entire package versions, not merely tag names:
 
 - All tags on a tagged version must identify closed PRs. Open-PR images and versions with unknown tags are retained.
+- Eligible image roots are processed oldest first using their creation timestamp (with a version-ID tie-breaker). If no tagged version would otherwise remain, the newest eligible tagged image and its complete manifest graph are retained because GHCR rejects deletion of the last tagged version. Once a newer preview exists, a subsequent sweep can remove the older retained image. This does not delete or recreate the package, so its visibility and access settings remain intact.
 - The registry's manifest graph identifies associated platform images and provenance/SBOM attestations. Descendants still referenced by retained images are preserved.
 - New preview indexes carry repository and PR annotations, allowing cleanup to recognize untagged indexes left by reruns. Older untagged images without provable PR ownership are retained rather than guessed from timestamps.
 - Discovery and PR-state checks must succeed before deletion. Cleanup rechecks closed PRs and the package snapshot before deleting; changed state aborts the run for a later retry.
@@ -208,9 +210,11 @@ Scheduled sweeps can overlap other PR builds; the snapshot check detects changes
 Production packages, Git tags, GitHub releases, and the preview package itself are never deleted.
 GitHub package deletion restrictions, such as public versions exceeding GitHub's download threshold, fail the run rather than bypassing protection.
 
-`pull_request_target` is used **only for cleanup**: the workflow checks out trusted shared tooling, never caller or PR sources, and never builds or executes PR code.
-Do not add this trigger to the container build workflow or pass an untrusted PR ref as `shared-ref`.
-The event is also safe for fork PRs because the token is used only for trusted metadata-driven cleanup; fork PR builds remain read-only and never publish.
+Cleanup uses ordinary `pull_request: closed` events, not `pull_request_target`; no opt-out from GitHub's public-repository event policy is needed.
+The caller and shared job both skip fork close events, keeping fork tokens read-only.
+The workflow checks out trusted shared tooling, never caller or PR sources, and never builds or executes PR code.
+Do not pass an untrusted PR ref as `shared-ref`.
+The shared workflow temporarily also accepts existing same-repository `pull_request_target: closed` callers so the shared change can be published before migrating callers; replace that trigger with the example above to avoid GitHub's November 2, 2026 policy restriction.
 
 ### Required root metadata and release tracks
 
