@@ -12,8 +12,12 @@ To use them, enable the Renovate GitHub App for each repository and add a `renov
 }
 ```
 
-The default preset extends Renovate's recommended configuration, removes its PR rate limit, pins GitHub Actions to commit digests, and disables automerge.
-Updates require review.
+The default preset extends Renovate's recommended configuration, removes its PR rate limit, pins GitHub Actions to commit digests, and enables semantic commits.
+
+Automerge is disabled by default, with package rules enabling GitHub's native PR automerge for minor, patch, pin, pin-digest, digest, and lock-file maintenance updates.
+Major updates remain subject to review and are assigned to `Skaronator`.
+Configure branch protection or rulesets with required checks so automerge cannot bypass validation.
+For container repositories, require successful uncached builds on both supported architectures.
 
 ## Container image repositories
 
