@@ -181,7 +181,7 @@ class MacroTests(unittest.TestCase):
                 else:
                     self.assertEqual(versions["releases"], [])
                     text = render_versions(item)
-                    self.assertIn("No published images", text)
+                    self.assertIn("No releases available yet", text)
                     self.assertIn(item["image"] + ":latest", text)
 
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": ""})
@@ -357,9 +357,7 @@ class MacroTests(unittest.TestCase):
         )
         item = {**IMAGE, "tags": {}, "releases": [], "legacyReleases": []}
         text = render_versions(item)
-        self.assertIn(
-            "No published images with matching release metadata are available yet", text
-        )
+        self.assertIn("No releases available yet", text)
         self.assertNotIn("| Track |", text)
 
     def test_os_column_formats_release_metadata(self) -> None:
@@ -718,6 +716,59 @@ class ContainerTemplateTests(unittest.TestCase):
 
 class SourceTests(unittest.TestCase):
     """Check release validation and HTTP credential boundaries."""
+
+    @patch("macros.main.request")
+    def test_no_release_metadata_skips_registry(self, request: Mock) -> None:
+        """Render unpublished repositories without querying a missing package."""
+        for releases in (
+            [],
+            [{"draft": True}],
+            [{"draft": False, "tag_name": "v0.1", "assets": []}],
+        ):
+            with self.subTest(releases=releases):
+                request.reset_mock()
+                request.return_value = (releases, {})
+                item = main.collect(REPOSITORY)
+                self.assertEqual(item["releases"], [])
+                self.assertEqual(item["tags"], {})
+                self.assertIn("No releases available yet", render_versions(item))
+                request.assert_called_once()
+                self.assertIn("api.github.com/repos/", request.call_args.args[0])
+
+    @patch("macros.main.collect_releases", return_value=(IMAGE["releases"], []))
+    @patch("macros.main.request")
+    def test_empty_registry_tags(self, request: Mock, releases: Mock) -> None:
+        """Treat null and empty registry tag lists as an empty published table."""
+        for tags in (None, []):
+            with self.subTest(tags=tags):
+                request.reset_mock()
+                request.side_effect = [
+                    ({"token": "registry-token"}, {}),
+                    ({"tags": tags}, {}),
+                ]
+                item = main.collect(REPOSITORY)
+                self.assertEqual(item["tags"], {})
+                self.assertIn("No releases available yet", render_versions(item))
+                self.assertEqual(request.call_count, 2)
+        self.assertEqual(releases.call_count, 2)
+
+    @patch("macros.main.collect_releases", return_value=(IMAGE["releases"], []))
+    @patch("macros.main.collect_tags", side_effect=RuntimeError("HTTP 403"))
+    def test_registry_failure_with_releases_propagates(
+        self, tags: Mock, releases: Mock
+    ) -> None:
+        """Do not disguise inaccessible published packages as empty repositories."""
+        with self.assertRaisesRegex(RuntimeError, "HTTP 403"):
+            main.collect(REPOSITORY)
+        tags.assert_called_once()
+        releases.assert_called_once()
+
+    @patch("macros.main.request", side_effect=RuntimeError("HTTP 403"))
+    def test_release_api_failure_propagates(self, request: Mock) -> None:
+        """Only a successful empty API response establishes an empty repository."""
+        with self.assertRaisesRegex(RuntimeError, "HTTP 403"):
+            main.collect(REPOSITORY)
+        request.assert_called_once()
 
     @patch("macros.main.build_opener")
     def test_reject_non_https_requests(self, opener: Mock) -> None:

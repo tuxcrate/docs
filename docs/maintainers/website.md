@@ -66,7 +66,7 @@ with key order preserved. Quote values that must remain strings, such as `"no"`
 or port mappings. Author the two examples independently; they are not converted
 into each other.
 
-Container images must be public at `ghcr.io/<owner>/<name>`.
+Published container images must be public at `ghcr.io/<owner>/<name>`.
 Every container page fetches version data automatically.
 
 The template calls `gh_image_versions_data(container.repository)` for structured data:
@@ -93,6 +93,9 @@ You do not need a separate generator, Go toolchain, Python requirements file, or
 - GHCR's tag list and current manifest digests verify that each displayed revision tag still matches its release metadata.
   The plugin fetches all pages of both APIs; missing or mismatched revision tags are excluded.
   Tags without matching metadata are not displayed; the plugin does not infer versions from tag names.
+- Repositories without published `release.json` metadata show “No releases available yet”.
+  They do not query GHCR, which may not have a package before the first release.
+  An empty registry tag list also shows this message. API errors still stop the build.
 - Each build takes a snapshot of the data.
   Tags can move during a build; the next build picks up those changes.
   The plugin never modifies registry tags or release history.
@@ -160,7 +163,12 @@ node --test macros/tests/test_container_tags.cjs
 ## Publishing
 
 The website workflow runs Ruff, pytest, and the Node.js tests before building or deploying.
-PR builds use offline fixtures, without API credentials.
+PR builds use live GitHub release and GHCR data, just like deployment builds.
+All build events use the job's read-only `GITHUB_TOKEN` for GitHub API calls;
+GHCR checks remain anonymous so CI verifies that documented images are public.
+Unreleased container pages can pass with an empty version table. Once release
+metadata exists, the build verifies the public registry package. Offline fixtures
+remain available for tests and local preview, but are not used by CI's website build.
 Default-branch pushes, manual runs, hourly schedules, and `image-published` repository dispatches build with live data and deploy GitHub Pages.
 Builds use `docker://zensical/zensical:0.0.71` directly as a GitHub Actions step.
 Only the test job installs Python dependencies; the build needs no explicit `docker run` command.
