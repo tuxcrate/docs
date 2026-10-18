@@ -190,6 +190,7 @@ def collect_releases(repository: str, image: str) -> tuple[list[Metadata], list[
             releases.append(
                 {
                     **record,
+                    "prerelease": release.get("prerelease") is True,
                     "releaseTag": release["tag_name"],
                     "publishedAt": release["published_at"],
                 }
@@ -287,13 +288,17 @@ def outdated_tracks(releases: list[Metadata]) -> dict[str, Metadata]:
             continue
         track = release["track"]
         if track not in newest or key > newest[track][0]:
-            newest[track] = (key, release["version"])
+            newest[track] = (key, release)
     if "stable" not in newest:
         return {}
-    stable_key, stable_version = newest["stable"]
+    stable_key, stable_release = newest["stable"]
     return {
-        track: {"version": version, "stable_version": stable_version}
-        for track, (key, version) in newest.items()
+        track: {
+            "version": release["version"],
+            "stable_version": stable_release["version"],
+            "prerelease": release.get("prerelease") is True,
+        }
+        for track, (key, release) in newest.items()
         if track != "stable" and key < stable_key
     }
 

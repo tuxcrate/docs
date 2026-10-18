@@ -307,7 +307,11 @@ class MacroTests(unittest.TestCase):
                 if expected:
                     self.assertEqual(
                         notices["prerelease"],
-                        {"version": other, "stable_version": stable},
+                        {
+                            "version": other,
+                            "stable_version": stable,
+                            "prerelease": False,
+                        },
                     )
 
     def test_outdated_tracks_use_highest_version_not_latest_rebuild(self) -> None:
@@ -316,18 +320,58 @@ class MacroTests(unittest.TestCase):
             {"track": "stable", "version": "1.0.0"},
             {"track": "stable", "version": "2.0.0"},
             {"track": "develop", "version": "1.9.0"},
-            {"track": "develop", "version": "1.0.0"},
+            {"track": "develop", "version": "1.0.0", "prerelease": True},
             {"track": "preview", "version": "2.1.0-rc.1"},
             {"track": "older", "version": "1.5.0"},
         ]
         expected = {
-            "develop": {"version": "1.9.0", "stable_version": "2.0.0"},
-            "older": {"version": "1.5.0", "stable_version": "2.0.0"},
+            "develop": {
+                "version": "1.9.0",
+                "stable_version": "2.0.0",
+                "prerelease": False,
+            },
+            "older": {
+                "version": "1.5.0",
+                "stable_version": "2.0.0",
+                "prerelease": False,
+            },
         }
         self.assertEqual(main.outdated_tracks(releases), expected)
         self.assertEqual(main.outdated_tracks(list(reversed(releases))), expected)
         self.assertEqual(main.outdated_tracks(releases[2:]), {})
         self.assertEqual(main.outdated_tracks([]), {})
+
+    def test_prerelease_build_notice_uses_release_flag(self) -> None:
+        """Do not infer build status from a track name or version suffix."""
+        item = copy.deepcopy(IMAGE)
+        stable = item["releases"][1]
+        message = "This image will no longer receive security updates."
+        for version, flag, expected in (
+            ("1.2.2", True, True),
+            ("1.2.2", False, False),
+            ("1.2.2", None, False),
+            ("1.2.3-rc.1", None, False),
+            ("1.2.4", True, False),
+        ):
+            with self.subTest(version=version, flag=flag):
+                release = {
+                    **stable,
+                    "track": "prerelease",
+                    "version": version,
+                    "immutableTag": f"{version}-r0",
+                    "releaseTag": f"v{version}-r0",
+                }
+                if flag is not None:
+                    release["prerelease"] = flag
+                snapshot = {
+                    **item,
+                    "releases": [release, stable],
+                    "tags": {
+                        **item["tags"],
+                        release["immutableTag"]: release["digest"],
+                    },
+                }
+                self.assertEqual(message in render_versions(snapshot), expected)
 
     def test_outdated_track_admonitions(self) -> None:
         """Warn above every older non-stable table, using verified releases only."""
@@ -341,6 +385,7 @@ class MacroTests(unittest.TestCase):
             release = {
                 **stable,
                 "track": track,
+                "prerelease": track == "develop",
                 "version": "1.2.2",
                 "revision": revision,
                 "immutableTag": f"1.2.2-r{revision}",
@@ -360,12 +405,16 @@ class MacroTests(unittest.TestCase):
         text = render_versions(item)
         self.assertEqual(text.count('!!! warning "Stable has a newer version"'), 3)
         self.assertEqual(
-            text.count("version, `1.2.2`, is older than stable (`1.2.3`)"), 3
+            text.count("version (`1.2.2`) is older than stable (`1.2.3`)"), 3
         )
         stable_section = text.split("\n### Stable\n")[1].split("\n### ")[0]
         self.assertNotIn("!!! warning", stable_section)
         for track in ("Develop", "Prerelease", "Older"):
             section = text.split(f"\n### {track}\n")[1].split("\n### ")[0]
+            self.assertEqual(
+                "This image will no longer receive security updates." in section,
+                track == "Develop",
+            )
             self.assertLess(
                 section.index("!!! warning"), section.index("| Image Tags |")
             )
@@ -939,6 +988,34 @@ class SourceTests(unittest.TestCase):
             calls[4].kwargs["headers"]["Authorization"], "Bearer registry-secret"
         )
         self.assertEqual(calls[5].kwargs["method"], "HEAD")
+
+    @patch("macros.main.request")
+    def test_collect_preserves_github_prerelease_flag(self, request: Mock) -> None:
+        """Use GitHub's flag even when an asset contains a conflicting value."""
+        record = IMAGE["releases"][1]
+        for prerelease in (True, False):
+            with self.subTest(prerelease=prerelease):
+                release = {
+                    "draft": False,
+                    "prerelease": prerelease,
+                    "tag_name": record["releaseTag"],
+                    "published_at": record["publishedAt"],
+                    "assets": [
+                        {
+                            "name": "release.json",
+                            "browser_download_url": (
+                                f"https://github.com/{REPOSITORY}/releases/download/"
+                                f"{record['releaseTag']}/release.json"
+                            ),
+                        }
+                    ],
+                }
+                request.side_effect = [
+                    ([release], {}),
+                    ({**record, "prerelease": not prerelease}, {}),
+                ]
+                releases, _ = main.collect_releases(REPOSITORY, IMAGE["image"])
+                self.assertIs(releases[0]["prerelease"], prerelease)
 
     @patch("macros.main.request")
     def test_reject_cross_origin_pagination(self, request: Mock) -> None:

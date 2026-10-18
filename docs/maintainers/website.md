@@ -82,6 +82,10 @@ Each non-stable track shows a warning when its highest verified application
 version is lower than stable's highest verified version. Comparisons use numeric
 version components, ignore image revisions and publication dates, and rank a
 stable version above its prerelease suffix. Equal or newer tracks show no warning.
+If the release representing that highest version is marked as a prerelease in
+GitHub, the warning also says that its image will no longer receive
+security updates. This uses the GitHub release's `prerelease` flag, not the track
+name or version suffix; `release.json` does not currently contain that flag.
 The data macro accepts short names resolving to `tuxcrate/<name>` as well as `owner/name`.
 
 Zensical's built-in macros plugin loads `macros/main.py` and renders the table during `build` or `serve`.
