@@ -241,7 +241,10 @@ class MacroTests(unittest.TestCase):
         self.assertEqual(text.count("\n### stable\n"), 1)
         self.assertEqual(text.count("\n### preview\n"), 1)
         self.assertEqual(
-            text.count('| Image Tags | <span class="nowrap">App Version</span> | OS | Published |'),
+            text.count(
+                '| Image Tags | <span class="nowrap">App Version</span>'
+                ' | OS | Published |'
+            ),
             2,
         )
         self.assertNotIn("| Track |", text)
@@ -390,7 +393,7 @@ class MacroTests(unittest.TestCase):
         text = render_versions(item)
         self.assertIn("&lt;script&gt;&#124;&#96;&#91;x&#93; ", text)
         self.assertIn(
-            "<code>&lt;img src=x onerror=&quot;alert(1)&quot;&gt;</code>", text
+            "`&lt;img src=x onerror=&quot;alert(1)&quot;&gt;`{ .nowrap }", text
         )
         self.assertNotIn("<script>", text)
         self.assertNotIn("<img ", text)
@@ -579,7 +582,8 @@ class ContainerTemplateTests(unittest.TestCase):
                 self.assertEqual(text.count(f"ghcr.io/tuxcrate/{name}:0.7.0-r5"), 2)
                 self.assertNotIn(f"ghcr.io/tuxcrate/{name}:latest", text)
                 self.assertIn(
-                    '| Image Tags | <span class="nowrap">App Version</span> | OS | Published |',
+                    '| Image Tags | <span class="nowrap">App Version</span>'
+                    ' | OS | Published |',
                     text,
                 )
                 self.assertNotIn("| Image Tags | Track |", text)
