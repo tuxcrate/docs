@@ -1,4 +1,4 @@
-name: Website
+name: Docs
 
 on:
   pull_request:
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: website-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'publish' }}
+  group: docs-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'publish' }}
   cancel-in-progress: false
 
 jobs:
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Build website
+      - name: Build docs
         uses: docker://zensical/zensical:0.0.71
         env:
           GH_TOKEN: ${{ github.event_name != 'pull_request' && secrets.GITHUB_TOKEN || '' }}

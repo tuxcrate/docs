@@ -2,7 +2,7 @@
 site_name = "Tuxcrate"
 site_description = "Open-source apps, ready to run."
 repo_url = "https://github.com/tuxcrate"
-edit_uri = "https://github.com/tuxcrate/website/edit/main/docs/"
+edit_uri = "https://github.com/tuxcrate/docs/edit/main/docs/"
 docs_dir = "docs"
 site_dir = "site"
 watch = ["templates", "macros"]

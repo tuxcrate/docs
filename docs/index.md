@@ -17,7 +17,7 @@ Find an image, check its runtime requirements, and choose a release tag for your
 Open an issue in the affected image's source repository, linked from its image page.
 Include the image tag or digest, your platform, steps to reproduce the problem, and relevant logs.
 Remove credentials and other sensitive information before posting.
-For problems with this website, use the [website issue tracker](https://github.com/tuxcrate/website/issues).
+For problems with this website, use the [website issue tracker](https://github.com/tuxcrate/docs/issues).
 
 ## Have a suggestion?
 

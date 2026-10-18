@@ -1,4 +1,4 @@
-# website
+# docs
 
 The Tuxcrate website for ready-to-run open-source apps.
 
