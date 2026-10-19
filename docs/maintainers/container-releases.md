@@ -55,88 +55,25 @@ Both repositories must be accessible to the caller.
 For private repositories, configure GitHub Actions access to the shared workflow and shared tooling checkout; the normal caller token cannot check out a different private repository.
 The current setup assumes this shared repository is public.
 
-### GitHub release metadata during builds
+### GitHub API requests during builds
 
-GitHub release tracks can opt into authenticated asset resolution with a
-`githubRelease` mapping in `meta.yaml`:
+The shared workflow passes the job's `GITHUB_TOKEN` as an optional BuildKit
+secret named `github_token` for production and same-repository PR builds.
+Containerfiles can mount `/run/secrets/github_token` and use it to authenticate
+GitHub API requests. Do not use shell tracing (`set -x`) when reading the secret
+or sending the authorization header. Never pass the token as a build argument,
+copy it into an image, or write it to a persistent file.
 
-```yaml
-tracks:
-  - name: stable
-    upstream:
-      datasource: github-releases
-      depName: Example/App
-      version: "1.2.3"
-    githubRelease:
-      tag: "v${version}"
-      assets:
-        amd64: "App.${version}.linux-x64.tar.gz"
-        arm64: "App.${version}.linux-arm64.tar.gz"
-    tags: ["${version}", latest]
-```
+BuildKit does not persist the secret mount in image layers, but the Containerfile
+can read and transmit the token. Only trusted contributors should have access to
+same-repository branches. Fork PRs receive no token and use unauthenticated
+requests, as do local builds without a secret. PyPI/APT Containerfiles need no
+changes and do not mount the secret.
 
-`tag` and each exact asset name support only the `${version}` placeholder, using
-the installation pin from `upstream.version`. The tag must contain this placeholder;
-moving tags such as `latest` are rejected. Templates use letters, digits,
-dots, underscores, plus signs and hyphens, and must start with a letter or digit.
-No wildcards or architecture-name guessing are used. Asset keys use Docker's
-architecture names, such as `amd64` and `arm64`; every configured platform needs
-an asset. Declare application-specific channel names in the asset templates on
-each track. The planner validates these settings even for dormant tracks.
-
-The workflow fetches the configured tag using the job's `GITHUB_TOKEN`, avoiding
-the shared anonymous GitHub API rate limit. It validates the exact tag, rejects
-drafts, checks the upstream prerelease flag against the track, and requires
-exactly one matching asset per architecture. URLs must identify the selected
-GitHub release download over HTTPS. Missing or invalid SHA-256 digests fail the
-job. GitHub's asset `digest` field supplies the checksum; it is not a separate API.
-
-The workflow supplies these public build arguments to all platform builds and
-PR OS validation:
-
-- `UPSTREAM_PRERELEASE`: `true` or `false`.
-- `UPSTREAM_URL_<ARCH>`: the selected download URL, such as `UPSTREAM_URL_AMD64`.
-- `UPSTREAM_SHA256_<ARCH>`: 64 lowercase hexadecimal characters, without `sha256:`.
-
-The Containerfile selects the URL/checksum using `TARGETARCH` and verifies the
-download with `sha256sum -c`. It needs neither `jq`, JSON secret mounts, nor
-GitHub API calls. The token never enters the build as an argument, environment
-variable, or secret. Fork PRs resolve these public fields using the read-only job
-token. Build arguments are visible in build metadata and must never contain
-credentials.
-
-PyPI, APT, plain-version tracks, and GitHub tracks without `githubRelease` make
-no metadata request and receive no extra arguments. Opt-in resolution supports
-public GitHub's default registry or explicit `https://github.com`; other
-datasources and custom registries cannot declare `githubRelease`. Missing tags,
-assets, authentication failures, and rate limits fail the job, with no anonymous
-fallback inside the container.
-
-For local builds, build `cmd/container-release` in the shared tooling repository.
-Run its `upstream-release` command from the image repository to generate the same
-arguments. With `GITHUB_OUTPUT` unset, it prints them to stdout. For example,
-in Bash (set `APP_VERSION` and `BASE_IMAGE` to the selected track's metadata):
-
-```bash
-set -euo pipefail
-resolved_args="$(env -u GITHUB_OUTPUT GH_TOKEN="$(gh auth token)" \
-  GITHUB_REPOSITORY=tuxcrate/example TRACK=stable \
-  /path/to/container-release upstream-release)"
-build_args=()
-while IFS= read -r arg; do
-  [[ -z "$arg" ]] || build_args+=(--build-arg "$arg")
-done <<< "$resolved_args"
-docker buildx build --pull --no-cache --platform linux/amd64,linux/arm64 \
-  --build-arg "APP_VERSION=$APP_VERSION" --build-arg "BASE_IMAGE=$BASE_IMAGE" \
-  --build-arg BUILDKIT_DOCKERFILE_CHECK=skip=InvalidDefaultArgInFrom \
-  "${build_args[@]}" -f Containerfile .
-```
-
-Local builds must supply the resolved arguments too; the Containerfile fails if
-they are missing. The CLI does not discover a newer version or follow latest.
-
-Merge and publish the shared workflow/tooling change before updating pinned
-callers. Keep each caller's `uses` and `shared-ref` references identical.
+For local authenticated builds, add
+`--secret id=github_token,env=GH_TOKEN` to the normal Buildx invocation, with
+`GH_TOKEN` set in the Docker client's environment, for example using
+`GH_TOKEN="$(gh auth token)" docker buildx build ...`.
 
 ### Behavior and tags
 
@@ -331,7 +268,7 @@ Its versions are fictional.
 Each Containerfile must be able to install the chosen version on every configured architecture.
 Track configuration does not discover upstream releases or make unavailable prerelease packages available.
 
-Configuration supports an optional top-level `image` and per-track `baseImage`, `context`, `containerfile`, `platforms` (comma-separated), `buildArgs` (string map), `upstream` discovery metadata, and opt-in `githubRelease` asset resolution.
+Configuration supports an optional top-level `image` and per-track `baseImage`, `context`, `containerfile`, `platforms` (comma-separated), `buildArgs` (string map), and `upstream` discovery metadata.
 Application versions may use three or four numeric components (`X.Y.Z` or `X.Y.Z.W`), with an optional prerelease suffix.
 Set `prerelease: true` on tracks whose upstream releases are prereleases despite having purely numeric versions.
 This flag is carried through the build matrix to release reservation and cannot be used to make a suffixed prerelease stable.
@@ -383,7 +320,7 @@ The Containerfile configures the package source and installs the pinned version.
 `baseImage` belongs to each track; a top-level `baseImage` is rejected.
 The YAML decoder also rejects unknown fields, duplicate keys, and multiple documents.
 Omitted build settings use the standard defaults above.
-Additional build arguments are declared only in each track's `buildArgs`; `APP_VERSION`, `BASE_IMAGE`, and all `UPSTREAM_`-prefixed names are reserved and cannot be overridden there.
+Additional build arguments are declared only in each track's `buildArgs`; `APP_VERSION` and `BASE_IMAGE` are reserved and cannot be overridden there.
 `APP_VERSION` is always supplied by the release planner in the workflow's build arguments.
 The `${version}` placeholder uses the application version without the Debian package revision.
 `APP_VERSION` remains the exact installation pin and never receives a synthetic image suffix.
