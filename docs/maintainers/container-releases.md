@@ -55,6 +55,53 @@ Both repositories must be accessible to the caller.
 For private repositories, configure GitHub Actions access to the shared workflow and shared tooling checkout; the normal caller token cannot check out a different private repository.
 The current setup assumes this shared repository is public.
 
+### GitHub release metadata during builds
+
+For tracks with `upstream.datasource: github-releases`, the shared workflow fetches
+release metadata using the job's `GITHUB_TOKEN` before building the image. This
+avoids the shared anonymous GitHub API rate limit on hosted runners. It tries
+the exact installation pin with a leading `v`, then the bare pin if GitHub returns
+404. It does not discover a newer version or follow the latest release.
+
+The response is passed to every platform build, including PR OS validation, as
+a BuildKit secret file named `github_release_json`. Only the JSON enters the
+build; the token is never passed as a build argument, environment variable, or
+BuildKit secret. Fork PRs can use this public metadata with their read-only job
+token without receiving credentials inside the build.
+
+Containerfiles opt in to consuming the metadata with an optional secret mount:
+
+```dockerfile
+RUN --mount=type=secret,id=github_release_json \
+    set -eu; \
+    if [ -s /run/secrets/github_release_json ]; then \
+        cp /run/secrets/github_release_json /tmp/release.json; \
+    else \
+        curl --fail --location --retry 3 \
+            "https://api.github.com/repos/OWNER/REPO/releases/tags/v${APP_VERSION}" \
+            --output /tmp/release.json; \
+    fi
+```
+
+Replace `OWNER/REPO` with the upstream project. The Containerfile must still
+validate the release tag, select the correct architecture/channel asset, and
+verify its SHA-256 digest. The shared workflow does not interpret asset names.
+GitHub's asset `digest` field supplies the checksum; it is not a separate API.
+
+Local builds without this secret use the Containerfile's unauthenticated
+fallback. To avoid that limit locally, fetch the metadata with `gh api` and pass
+it using `--secret id=github_release_json,src=/path/to/release.json`.
+
+PyPI, APT, plain-version tracks, and custom GitHub registry URLs are skipped:
+they make no metadata request and receive no secret file. Public GitHub's
+default registry (or explicit `https://github.com`) is supported. Unusual tag
+formats fall back to the Containerfile if both tag candidates return 404;
+authentication errors, rate limits, invalid metadata, and other request failures
+fail the workflow rather than silently falling back to anonymous requests.
+
+Merge and publish the shared workflow/tooling change before updating pinned
+callers. Keep each caller's `uses` and `shared-ref` references identical.
+
 ### Behavior and tags
 
 - PRs build both platforms using QEMU.
