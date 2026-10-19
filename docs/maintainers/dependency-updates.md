@@ -78,3 +78,34 @@ Image builds verify the upstream release's prerelease flag and branch-specific a
 
 See [container releases](container-releases.md) for the metadata schema.
 Publish shared tooling and preset changes before migrating image repositories.
+
+### GitHub prerelease-only discovery
+
+The `images` preset provides `custom.github-prereleases` for any public GitHub repository.
+It reads the 100 most recent releases and includes only releases with `draft: false` and `prerelease: true`.
+Stable releases are excluded even when their version is newer.
+Release timestamps, changelog links, and the source repository URL are retained.
+
+Opt in for the desired track in the image repository's `renovate.json`:
+
+```json
+{
+  "extends": ["github>tuxcrate/renovate-config:images"],
+  "packageRules": [
+    {
+      "matchDatasources": ["github-releases"],
+      "matchDepTypes": ["prerelease"],
+      "overrideDatasource": "custom.github-prereleases",
+      "ignoreUnstable": false,
+      "respectLatest": false
+    }
+  ]
+}
+```
+
+Keep `upstream.datasource: github-releases` and `upstream.depName: owner/repo` in `meta.yaml`.
+Set `matchDepTypes` to the actual track name, such as `develop`, and keep application-specific `extractVersion` and `versioning` rules locally.
+The shared preset does not automatically change any track's release channel.
+Builds must still verify the upstream channel and required architecture assets.
+
+Publish this preset before removing repository-local datasource definitions.
