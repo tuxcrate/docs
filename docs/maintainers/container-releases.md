@@ -55,6 +55,26 @@ Both repositories must be accessible to the caller.
 For private repositories, configure GitHub Actions access to the shared workflow and shared tooling checkout; the normal caller token cannot check out a different private repository.
 The current setup assumes this shared repository is public.
 
+### GitHub API requests during builds
+
+The shared workflow passes the job's `GITHUB_TOKEN` as an optional BuildKit
+secret named `github_token` for production and same-repository PR builds.
+Containerfiles can mount `/run/secrets/github_token` and use it to authenticate
+GitHub API requests. Do not use shell tracing (`set -x`) when reading the secret
+or sending the authorization header. Never pass the token as a build argument,
+copy it into an image, or write it to a persistent file.
+
+BuildKit does not persist the secret mount in image layers, but the Containerfile
+can read and transmit the token. Only trusted contributors should have access to
+same-repository branches. Fork PRs receive no token and use unauthenticated
+requests, as do local builds without a secret. PyPI/APT Containerfiles need no
+changes and do not mount the secret.
+
+For local authenticated builds, add
+`--secret id=github_token,env=GH_TOKEN` to the normal Buildx invocation, with
+`GH_TOKEN` set in the Docker client's environment, for example using
+`GH_TOKEN="$(gh auth token)" docker buildx build ...`.
+
 ### Behavior and tags
 
 - PRs build both platforms using QEMU.
