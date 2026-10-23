@@ -3,6 +3,7 @@
   "images": [
     {
       "repository": "tuxcrate/prowlarr",
+      "pulls": 12345,
       "image": "ghcr.io/tuxcrate/prowlarr",
       "releases": [
         {
@@ -53,6 +54,7 @@
     },
     {
       "repository": "tuxcrate/radarr",
+      "pulls": 23456,
       "image": "ghcr.io/tuxcrate/radarr",
       "releases": [
         {
@@ -102,6 +104,7 @@
     },
     {
       "repository": "tuxcrate/sonarr",
+      "pulls": 34567,
       "image": "ghcr.io/tuxcrate/sonarr",
       "releases": [
         {
@@ -151,6 +154,7 @@
     },
     {
       "repository": "tuxcrate/zrepl",
+      "pulls": 45678,
       "image": "ghcr.io/tuxcrate/zrepl",
       "releases": [
         {
@@ -342,6 +346,7 @@
     },
     {
       "repository": "tuxcrate/gallery-dl",
+      "pulls": 56789,
       "image": "ghcr.io/tuxcrate/gallery-dl",
       "releases": [
         {
