@@ -696,7 +696,7 @@ class ContainerTemplateTests(unittest.TestCase):
             }
         )
         env.globals["gh_image_versions_data"] = versions
-        for name in ("gallery-dl", "zrepl", "sonarr", "prowlarr"):
+        for name in ("gallery-dl", "zrepl", "sonarr", "prowlarr", "radarr"):
             with self.subTest(name=name):
                 versions.reset_mock()
                 source = (root / "docs/containers" / f"{name}.md").read_text()
@@ -717,6 +717,16 @@ class ContainerTemplateTests(unittest.TestCase):
                     f"/pkgs/container/{name})",
                     text,
                 )
+                badge = (
+                    f"[![GHCR pulls](https://ghcr-badge.elias.eu.org/shield/"
+                    f"tuxcrate/{name}/{name})](https://github.com/tuxcrate/{name}"
+                    f"/pkgs/container/{name}){{ .container-pulls }}"
+                )
+                self.assertIn(badge, text)
+                self.assertLess(
+                    text.index(".container-link--registry"), text.index(badge)
+                )
+                self.assertLess(text.index(badge), text.index('!!! info "About'))
                 self.assertIn('=== ":lucide-terminal: CLI"', text)
                 self.assertIn('=== ":simple-docker: Compose"', text)
                 self.assertIn('```sh linenums="1"', text)

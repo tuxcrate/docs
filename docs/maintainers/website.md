@@ -52,6 +52,12 @@ Explain the tags supported by this image.
 
 The template supplies the title, Upstream / Container source / GHCR buttons,
 description in an info admonition, CLI and Compose tabs with line numbers, and a version table.
+Next to the GHCR button, a pulls badge links to the same package page and shows
+GitHub's total package downloads (not unique users).
+The browser loads this badge from the third-party
+[ghcr-badge service](https://github.com/eliasbenb/ghcr-badge); its count may be cached.
+It is not fetched during builds, so service outages do not block deployment or
+offline builds, though viewing the badge requires network access.
 Keep `container.description` to two or three sentences explaining what the tool does.
 Put configuration details and prerequisites in the corresponding Markdown blocks.
 All three content blocks are optional; use them to keep longer documentation in Markdown.
