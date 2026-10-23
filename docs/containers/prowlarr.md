@@ -2,7 +2,7 @@
 title: prowlarr
 container:
   repository: tuxcrate/prowlarr
-  topics: [containers, docker, indexer-manager, prowlarr, tuxcrate]
+  topics: [containers, docker, indexer-manager, prowlarr]
   upstream: https://github.com/Prowlarr/Prowlarr
   description: >-
     Prowlarr manages and syncs Torrent and Usenet indexers across your media apps.

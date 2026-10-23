@@ -15,7 +15,7 @@ Add `docs/containers/<name>.md` with YAML front matter and extend the template:
 title: example
 container:
   repository: tuxcrate/example
-  topics: [containers, docker, example, tuxcrate]
+  topics: [containers, docker, example]
   upstream: https://github.com/example/example
   description: A short description of the tool.
   docker_run:
@@ -60,7 +60,7 @@ Navigation discovers pages in `docs/containers/` automatically.
 The OpenTofu configuration in the `infrastructure/` directory of `tuxcrate/.github`
 also reads this front matter for GitHub repository About settings.
 `container.description` supplies the description and `container.topics` supplies
-the GitHub topics; the infrastructure configuration also includes `tuxcrate`.
+the GitHub topics. Do not list `tuxcrate`: OpenTofu adds it automatically.
 Topics are lowercase names using
 letters, numbers, and hyphens (at most 20 topics, each at most 50 characters).
 The homepage is derived as `https://tuxcrate.com/containers/<name>/` from the page

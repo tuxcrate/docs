@@ -2,7 +2,7 @@
 title: radarr
 container:
   repository: tuxcrate/radarr
-  topics: [containers, docker, movie-manager, radarr, tuxcrate]
+  topics: [containers, docker, movie-manager, radarr]
   upstream: https://github.com/Radarr/Radarr
   description: >-
     Radarr is a movie collection manager for Usenet and BitTorrent users.

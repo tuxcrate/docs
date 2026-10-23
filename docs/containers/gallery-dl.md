@@ -2,7 +2,7 @@
 title: gallery-dl
 container:
   repository: tuxcrate/gallery-dl
-  topics: [containers, docker, gallery-dl, image-downloader, tuxcrate]
+  topics: [containers, docker, gallery-dl, image-downloader]
   upstream: https://github.com/mikf/gallery-dl
   description: >-
     gallery-dl is a command-line program to download image galleries and collections from several image hosting sites.
