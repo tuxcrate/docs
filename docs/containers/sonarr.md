@@ -2,6 +2,7 @@
 title: sonarr
 container:
   repository: tuxcrate/sonarr
+  topics: [containers, docker, sonarr, tv-manager, tuxcrate]
   upstream: https://github.com/Sonarr/Sonarr
   description: >-
     Sonarr is a TV series collection manager for Usenet and BitTorrent users.

@@ -15,6 +15,7 @@ Add `docs/containers/<name>.md` with YAML front matter and extend the template:
 title: example
 container:
   repository: tuxcrate/example
+  topics: [containers, docker, example, tuxcrate]
   upstream: https://github.com/example/example
   description: A short description of the tool.
   docker_run:
@@ -55,6 +56,21 @@ Keep `container.description` to two or three sentences explaining what the tool 
 Put configuration details and prerequisites in the corresponding Markdown blocks.
 All three content blocks are optional; use them to keep longer documentation in Markdown.
 Navigation discovers pages in `docs/containers/` automatically.
+
+The OpenTofu configuration in the `infrastructure/` directory of `tuxcrate/.github`
+also reads this front matter for GitHub repository About settings.
+`container.description` supplies the description and `container.topics` supplies
+the GitHub topics; the infrastructure configuration also includes `tuxcrate`.
+Topics are lowercase names using
+letters, numbers, and hyphens (at most 20 topics, each at most 50 characters).
+The homepage is derived as `https://tuxcrate.com/containers/<name>/` from the page
+filename, which must match the repository name. Descriptions must fit GitHub's
+350-character limit. Publishing a docs change does not itself update GitHub:
+an infrastructure maintainer must review/apply a plan using the updated docs checkout.
+New containers must be added to `infrastructure/repositories.tf` in `tuxcrate/.github`.
+Container repositories require the shared workflow's fixed
+`container / pull-request-check` aggregate check, which covers planning and all
+active tracks without requiring checks for dormant prereleases.
 
 `docker_run` is a nonempty list of single-line shell fragments, one per output line.
 Do not include `docker run` itself. Keep shell quoting explicit: fragments are joined,

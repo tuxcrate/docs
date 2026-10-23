@@ -396,7 +396,13 @@ Rules:
   Use only one publishing caller/configuration per image repository.
 
 PR builds are uncached on every configured platform so an earlier build cannot hide a missing APT package.
-Make the container PR build check required in GitHub branch protection/rulesets.
+Require `container / pull-request-check` in GitHub branch protection/rulesets, not individual matrix-track checks.
+This fixed aggregate check succeeds only when planning and every active track build succeed;
+failed, cancelled, or unexpectedly skipped dependencies fail the check.
+Superseded prerelease tracks are omitted from the matrix and do not need separate required checks.
+When migrating existing protection, publish the shared workflow first, rerun all jobs in open PR workflows to create the new check,
+then apply the OpenTofu configuration to replace the old per-track requirements.
+Rerunning only failed jobs can reuse the old shared-workflow commit.
 Package discovery for one architecture is not proof of availability for another; rerun failed checks after delayed upstream publication.
 PRs never publish production images or move production aliases.
 

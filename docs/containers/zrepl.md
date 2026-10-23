@@ -2,6 +2,7 @@
 title: zrepl
 container:
   repository: tuxcrate/zrepl
+  topics: [backup, containers, docker, tuxcrate, zfs, zrepl]
   upstream: https://github.com/zrepl/zrepl
   description: >-
     zrepl is a ZFS replication tool.
