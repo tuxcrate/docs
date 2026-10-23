@@ -34,10 +34,14 @@
   --container-link-hover: #5b21b6;
 }
 
-.md-typeset .container-link--registry,
-.md-typeset .container-link--pulls {
+.md-typeset .container-link--registry {
   --container-link-color: #0f766e;
   --container-link-hover: #115e59;
+}
+
+.md-typeset .container-link--pulls {
+  --container-link-color: #b45309;
+  --container-link-hover: #92400e;
 }
 
 .md-typeset .md-button.container-link {
