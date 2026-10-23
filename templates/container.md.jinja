@@ -3,10 +3,13 @@
 {% set container = page.meta.container %}
 {% set registry_url = "https://github.com/" ~ container.repository ~ "/pkgs/container/" ~ container.repository.split('/')[1] %}
 {% set releases_url = "https://github.com/" ~ container.repository ~ "/releases" %}
+{% set versions = gh_image_versions_data(container.repository) %}
 [:lucide-external-link: Upstream]({{ container.upstream }}){ .md-button .container-link .container-link--upstream }
 [:simple-github: Container source](https://github.com/{{ container.repository }}){ .md-button .container-link .container-link--source }
 [:lucide-package: GHCR]({{ registry_url }}){ .md-button .container-link .container-link--registry }
-[![GHCR pulls](https://ghcr-badge.elias.eu.org/shield/{{ container.repository }}/{{ container.repository.split('/')[1] }})]({{ registry_url }}){ .container-pulls }
+{% if versions.get('pulls') is not none -%}
+[:lucide-download: Pulls: {{ "{:,}".format(versions.pulls) }}]({{ registry_url }} "Total GHCR downloads at the last website build"){ .md-button .container-link .container-link--pulls }
+{% endif %}
 
 !!! info "About {{ page.meta.title }}"
 
@@ -16,7 +19,6 @@
 
 ## Published versions
 
-{% set versions = gh_image_versions_data(container.repository) %}
 {% set stable_releases = versions.releases | selectattr('track', 'equalto', 'stable') | list %}
 {% set default_releases = stable_releases if stable_releases else versions.releases %}
 {% set default_tag = default_releases[0].immutableTag if default_releases else "latest" %}

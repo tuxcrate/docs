@@ -34,7 +34,8 @@
   --container-link-hover: #5b21b6;
 }
 
-.md-typeset .container-link--registry {
+.md-typeset .container-link--registry,
+.md-typeset .container-link--pulls {
   --container-link-color: #0f766e;
   --container-link-hover: #115e59;
 }
@@ -44,17 +45,6 @@
   background-color: var(--container-link-color);
   border-color: var(--container-link-color);
   margin-bottom: 0.4rem;
-  vertical-align: middle;
-}
-
-.md-typeset .container-pulls {
-  display: inline-block;
-  margin-bottom: 0.4rem;
-  vertical-align: middle;
-}
-
-.md-typeset .container-pulls img {
-  display: block;
 }
 
 .md-typeset .md-button.container-link:hover,
@@ -64,8 +54,7 @@
   border-color: var(--container-link-hover);
 }
 
-.md-typeset .md-button.container-link:focus-visible,
-.md-typeset .container-pulls:focus-visible {
+.md-typeset .md-button.container-link:focus-visible {
   outline: 3px solid var(--md-default-fg-color);
   outline-offset: 3px;
 }

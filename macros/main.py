@@ -68,9 +68,13 @@ class SafeRedirect(HTTPRedirectHandler):
 
 
 def request(
-    url: str, *, headers: Mapping[str, str] | None = None, method: str = "GET"
-) -> tuple[Metadata | list[Metadata] | None, Message]:
-    """Fetch bounded JSON responses or manifest headers from HTTPS sources."""
+    url: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+    method: str = "GET",
+    text: bool = False,
+) -> tuple[Metadata | list[Metadata] | str | None, Message]:
+    """Fetch bounded JSON/text responses or manifest headers from HTTPS sources."""
     if urlsplit(url).scheme != "https":
         message = "Refusing a non-HTTPS request"
         raise ValueError(message)
@@ -94,7 +98,7 @@ def request(
         if len(data) > 32 * 1024 * 1024:
             msg = f"Response too large: {url}"
             raise ValueError(msg)
-        return json.loads(data), response.headers
+        return data.decode("utf-8") if text else json.loads(data), response.headers
 
 
 def pages(url: str, headers: Mapping[str, str]) -> Iterator[Metadata | list[Metadata]]:
@@ -242,8 +246,26 @@ def collect_tags(repository: str, image: str) -> dict[str, str]:
     return tags
 
 
+def collect_pulls(repository: str) -> int:
+    """Read the exact package-wide total from GitHub's public package page."""
+    package = repository.split("/")[1]
+    url = f"https://github.com/{repository}/pkgs/container/{package}"
+    document, _ = request(url, headers={"Accept": "text/html"}, text=True)
+    # The visible heading can be abbreviated (e.g. 1.2k); its title is exact.
+    # Scope it to Total downloads, not the individual version download counts.
+    matches = re.findall(
+        r">\s*Total downloads\s*</span>\s*<h3\b[^>]*\btitle=[\"']"
+        r"([0-9]+(?:,[0-9]{3})*)[\"']",
+        document,
+    )
+    if len(matches) != 1:
+        msg = f"Missing or ambiguous total downloads on {url}"
+        raise ValueError(msg)
+    return int(matches[0].replace(",", ""))
+
+
 def collect(repository: str) -> Metadata:
-    """Collect release metadata and current registry digests for an image."""
+    """Collect release metadata, current registry digests, and total pulls."""
     image = f"ghcr.io/{repository}"
     releases, legacy = collect_releases(repository, image)
     # A new repository may not have a GHCR package until its first release.
@@ -254,6 +276,7 @@ def collect(repository: str) -> Metadata:
         "releases": releases,
         "legacyReleases": legacy,
         "tags": tags,
+        "pulls": collect_pulls(repository) if tags else None,
     }
 
 
@@ -344,6 +367,7 @@ def gh_image_versions_data(name: str) -> Metadata:
         releases.append({**release, "tags": [release["immutableTag"], *aliases]})
     return {
         "image": item["image"],
+        "pulls": item.get("pulls"),
         "releases": releases,
         "outdated_tracks": outdated_tracks(releases),
         "preview": bool(fixture),

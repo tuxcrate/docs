@@ -52,12 +52,13 @@ Explain the tags supported by this image.
 
 The template supplies the title, Upstream / Container source / GHCR buttons,
 description in an info admonition, CLI and Compose tabs with line numbers, and a version table.
-Next to the GHCR button, a pulls badge links to the same package page and shows
-GitHub's total package downloads (not unique users).
-The browser loads this badge from the third-party
-[ghcr-badge service](https://github.com/eliasbenb/ghcr-badge); its count may be cached.
-It is not fetched during builds, so service outages do not block deployment or
-offline builds, though viewing the badge requires network access.
+Next to the GHCR button, a matching Pulls button links to the same package page
+and shows GitHub's total package downloads (not unique users).
+Python reads this total at build time from the public package page, using the
+exact heading title rather than its potentially abbreviated display text.
+The count is a snapshot refreshed on the next build; no browser-side requests
+or third-party badge services are needed. Unpublished packages omit the counter
+rather than displaying a misleading zero. Offline previews use fictional counts.
 Keep `container.description` to two or three sentences explaining what the tool does.
 Put configuration details and prerequisites in the corresponding Markdown blocks.
 All three content blocks are optional; use them to keep longer documentation in Markdown.
@@ -131,6 +132,10 @@ You do not need a separate generator, Go toolchain, Python requirements file, or
 - Each build takes a snapshot of the data.
   Tags can move during a build; the next build picks up those changes.
   The plugin never modifies registry tags or release history.
+- Pull totals come from GitHub's public package HTML, not the registry tag API.
+  Published packages with registry tags require a readable total; fetching or
+  parsing failures stop the build rather than publishing an incorrect count.
+  A GitHub markup change may require updating the parser.
 - `GH_TOKEN` (or `GITHUB_TOKEN`) authenticates GitHub API calls when supplied.
   The plugin does not send the token when downloading public release assets, and GHCR uses anonymous pulls.
   An API or rendering failure stops the build, so partial tables are never deployed.

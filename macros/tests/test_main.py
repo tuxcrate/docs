@@ -686,6 +686,7 @@ class ContainerTemplateTests(unittest.TestCase):
             return_value={
                 "image": IMAGE["image"],
                 "preview": False,
+                "pulls": 12345,
                 "releases": [
                     {
                         **IMAGE["releases"][1],
@@ -709,24 +710,27 @@ class ContainerTemplateTests(unittest.TestCase):
                 self.assertIn(f"# {metadata['title']}", text)
                 self.assertIn(f'!!! info "About {metadata["title"]}"', text)
                 self.assertIn("    " + metadata["container"]["description"], text)
-                self.assertEqual(text.count("{ .md-button .container-link "), 3)
-                for button in ("upstream", "source", "registry"):
+                self.assertEqual(text.count("{ .md-button .container-link "), 4)
+                for button in ("upstream", "source", "registry", "pulls"):
                     self.assertIn(f".container-link--{button}", text)
                 self.assertIn(
                     f"[:lucide-package: GHCR](https://github.com/tuxcrate/{name}"
                     f"/pkgs/container/{name})",
                     text,
                 )
-                badge = (
-                    f"[![GHCR pulls](https://ghcr-badge.elias.eu.org/shield/"
-                    f"tuxcrate/{name}/{name})](https://github.com/tuxcrate/{name}"
-                    f"/pkgs/container/{name}){{ .container-pulls }}"
+                counter = (
+                    f"[:lucide-download: Pulls: 12,345](https://github.com/tuxcrate/"
+                    f'{name}/pkgs/container/{name} "Total GHCR downloads at the last '
+                    'website build"){ .md-button .container-link '
+                    ".container-link--pulls }"
                 )
-                self.assertIn(badge, text)
+                self.assertIn(counter, text)
+                self.assertIn(".container-link--registry }\n" + counter, text)
                 self.assertLess(
-                    text.index(".container-link--registry"), text.index(badge)
+                    text.index(".container-link--registry"), text.index(counter)
                 )
-                self.assertLess(text.index(badge), text.index('!!! info "About'))
+                self.assertLess(text.index(counter), text.index('!!! info "About'))
+                self.assertNotIn("ghcr-badge", text)
                 self.assertIn('=== ":lucide-terminal: CLI"', text)
                 self.assertIn('=== ":simple-docker: Compose"', text)
                 self.assertIn('```sh linenums="1"', text)
@@ -760,6 +764,16 @@ class ContainerTemplateTests(unittest.TestCase):
                     self.assertIn("--privileged", text)
                     self.assertIn("privileged: true", text)
 
+    def test_pull_counter_zero_and_unavailable(self) -> None:
+        """Show a genuine zero but omit unavailable counts instead of inventing one."""
+        for pulls in (0, None):
+            with self.subTest(pulls=pulls):
+                text = render_versions({**IMAGE, "pulls": pulls})
+                self.assertEqual(".container-link--pulls" in text, pulls is not None)
+                if pulls == 0:
+                    self.assertIn("Pulls: 0", text)
+                self.assertNotIn("ghcr-badge", text)
+
     @patch.dict(os.environ, {"GH_IMAGE_VERSIONS_FIXTURE": str(FIXTURE)})
     @patch(
         "macros.main.request",
@@ -776,6 +790,7 @@ class ContainerTemplateTests(unittest.TestCase):
             .render(page={"meta": yaml.safe_load(front_matter)})
         )
         self.assertIn("fictional test data", text)
+        self.assertIn("Pulls: 56,789", text)
         self.assertIn(
             '| Image Tags | <span class="nowrap">App Version</span> | OS | Published |',
             text,
@@ -898,6 +913,75 @@ class ContainerTemplateTests(unittest.TestCase):
 class SourceTests(unittest.TestCase):
     """Check release validation and HTTP credential boundaries."""
 
+    @patch("macros.main.build_opener")
+    def test_request_text(self, opener: Mock) -> None:
+        """Decode bounded public HTML without trying to parse it as JSON."""
+        response = opener.return_value.open.return_value
+        response.read.return_value = b'<span>Total downloads</span><h3 title="0">0</h3>'
+        document, headers = main.request("https://github.com/package", text=True)
+        self.assertEqual(document, response.read.return_value.decode("utf-8"))
+        self.assertIs(headers, response.headers)
+        response.read.assert_called_once_with(32 * 1024 * 1024 + 1)
+        opener.return_value.open.assert_called_once()
+        self.assertEqual(opener.return_value.open.call_args.kwargs["timeout"], 60)
+
+    @patch.dict(os.environ, {"GH_TOKEN": "github-secret"})
+    @patch("macros.main.request")
+    def test_collect_pulls(self, request: Mock) -> None:
+        """Read exact totals anonymously, ignoring rounded and per-version counts."""
+        for title, display, expected in (
+            ("0", "0", 0),
+            ("242", "242", 242),
+            ("12345", "12.3k", 12345),
+            ("1,234,567", "1.2M", 1234567),
+        ):
+            with self.subTest(title=title):
+                request.reset_mock()
+                request.return_value = (
+                    (
+                        '<h3 title="99">99</h3><span>Version downloads</span>'
+                        '<span class="muted">\n Total downloads\n</span>\n'
+                        f'<h3 class="heading" title="{title}">{display}</h3>'
+                    ),
+                    {},
+                )
+                self.assertEqual(main.collect_pulls(REPOSITORY), expected)
+                request.assert_called_once_with(
+                    "https://github.com/tuxcrate/zrepl/pkgs/container/zrepl",
+                    headers={"Accept": "text/html"},
+                    text=True,
+                )
+
+    @patch("macros.main.request")
+    def test_invalid_pull_totals(self, request: Mock) -> None:
+        """Fail on missing, ambiguous, negative, or abbreviated exact totals."""
+        valid = '<span>Total downloads</span><h3 title="123">123</h3>'
+        for document in (
+            "<h1>Sign in</h1>",
+            '<span>Version downloads</span><h3 title="123">123</h3>',
+            "<span>Total downloads</span><h3>1.2k</h3>",
+            valid.replace('title="123"', 'title="1.2k"'),
+            valid.replace('title="123"', 'title="-1"'),
+            valid + valid,
+        ):
+            with self.subTest(document=document):
+                request.return_value = (document, {})
+                with self.assertRaisesRegex(ValueError, "total downloads"):
+                    main.collect_pulls(REPOSITORY)
+
+    @patch("macros.main.collect_pulls", side_effect=RuntimeError("HTTP 503"))
+    @patch("macros.main.collect_tags", return_value=IMAGE["tags"])
+    @patch("macros.main.collect_releases", return_value=(IMAGE["releases"], []))
+    def test_pull_failure_propagates(
+        self, releases: Mock, tags: Mock, pulls: Mock
+    ) -> None:
+        """Stop the build instead of replacing an unavailable total with zero."""
+        with self.assertRaisesRegex(RuntimeError, "HTTP 503"):
+            main.collect(REPOSITORY)
+        pulls.assert_called_once_with(REPOSITORY)
+        tags.assert_called_once()
+        releases.assert_called_once()
+
     @patch("macros.main.request")
     def test_no_release_metadata_skips_registry(self, request: Mock) -> None:
         """Render unpublished repositories without querying a missing package."""
@@ -912,7 +996,10 @@ class SourceTests(unittest.TestCase):
                 item = main.collect(REPOSITORY)
                 self.assertEqual(item["releases"], [])
                 self.assertEqual(item["tags"], {})
-                self.assertIn("No releases available yet", render_versions(item))
+                self.assertIsNone(item["pulls"])
+                text = render_versions(item)
+                self.assertIn("No releases available yet", text)
+                self.assertNotIn(".container-link--pulls", text)
                 request.assert_called_once()
                 self.assertIn("api.github.com/repos/", request.call_args.args[0])
 
@@ -929,6 +1016,7 @@ class SourceTests(unittest.TestCase):
                 ]
                 item = main.collect(REPOSITORY)
                 self.assertEqual(item["tags"], {})
+                self.assertIsNone(item["pulls"])
                 self.assertIn("No releases available yet", render_versions(item))
                 self.assertEqual(request.call_count, 2)
         self.assertEqual(releases.call_count, 2)
@@ -1011,6 +1099,7 @@ class SourceTests(unittest.TestCase):
             (None, {"Docker-Content-Digest": record["digest"]}),
             ({"tags": ["1.2.3-r1"]}, {}),
             (None, {"Docker-Content-Digest": record["digest"]}),
+            ('<span>Total downloads</span><h3 title="12345">12.3k</h3>', {}),
         ]
         item = main.collect(REPOSITORY)
         self.assertEqual(
@@ -1018,6 +1107,7 @@ class SourceTests(unittest.TestCase):
         )
         self.assertEqual(len(item["releases"]), 1)
         self.assertEqual(item["legacyReleases"], ["v0.1"])
+        self.assertEqual(item["pulls"], 12345)
         calls = request.call_args_list
         self.assertEqual(
             calls[0].kwargs["headers"]["Authorization"], "Bearer github-secret"
@@ -1027,6 +1117,7 @@ class SourceTests(unittest.TestCase):
             calls[4].kwargs["headers"]["Authorization"], "Bearer registry-secret"
         )
         self.assertEqual(calls[5].kwargs["method"], "HEAD")
+        self.assertNotIn("Authorization", calls[-1].kwargs["headers"])
 
     @patch("macros.main.request")
     def test_collect_preserves_github_prerelease_flag(self, request: Mock) -> None:
