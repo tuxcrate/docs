@@ -27,6 +27,7 @@ jobs:
       packages: write
       pull-requests: write
     uses: tuxcrate/github-actions/.github/workflows/container.yml@main
+    secrets: inherit
 ```
 
 Every caller repository must contain `meta.yaml` in its root, even for single-track images.
@@ -48,7 +49,7 @@ Metadata can override these for individual tracks; the caller workflow stays the
 | Input | Default | Purpose |
 | --- | --- | --- |
 | `shared-ref` | `main` | Shared tooling ref; must match the workflow's `uses` ref |
-| `docs-repository` | Empty | Optional `owner/repo` to notify with an `image-published` repository dispatch |
+| `docs-repository` | `tuxcrate/docs` | `owner/repo` to notify with an `image-published` repository dispatch; set to `''` to disable |
 
 For a pinned integration, use the same commit SHA in the workflow's `uses` and `shared-ref`.
 Both repositories must be accessible to the caller.
@@ -455,25 +456,37 @@ Historical alias lists record assignments at publication time.
 They do not show current assignments.
 Releases created before this metadata was added remain valid; the website lists them without adding data it does not have.
 
-For immediate refreshes, optionally add this to the caller job:
+For immediate refreshes, forward the organization's `DOCS_TOKEN` secret in the caller job.
+The shared workflow defaults to notifying `tuxcrate/docs`, and `shared-ref` already defaults to `main`:
 
 {% raw %}
 ```yaml
-with:
-  docs-repository: tuxcrate/docs
-secrets:
-  docs-token: ${{ secrets.DOCS_TOKEN }}
+uses: tuxcrate/github-actions/.github/workflows/container.yml@main
+secrets: inherit
 ```
 {% endraw %}
 
 Use a GitHub App installation token or fine-grained token with contents: write on the docs repository only.
-The caller's `DOCS_TOKEN` repository secret is passed as `docs-token`.
+The organization secret must be available to each caller repository.
+`secrets: inherit` forwards all secrets available to the caller, not just `DOCS_TOKEN`.
+For narrower access, use an explicit mapping instead:
+
+{% raw %}
+```yaml
+secrets:
+  DOCS_TOKEN: ${{ secrets.DOCS_TOKEN }}
+```
+{% endraw %}
+
+The old explicit `docs-token` mapping remains supported for existing callers and takes precedence if both names are provided.
+Secrets stored only in the shared workflow repository are not available to callers.
 The caller's `GITHUB_TOKEN` cannot dispatch to a different repository.
 Never pass the website token into builds or PR jobs.
 One notification is sent after all release tracks finish successfully; PR builds and failed releases do not notify.
 A missing token produces a warning.
 If the notification fails, the release still succeeds; the website refreshes on its hourly schedule.
 Configure `DOCS_TOKEN` as a repository secret, or an organization secret available to each caller.
+Set `with.docs-repository: ''` to disable notifications, or override it to notify another repository.
 Without this optional token, the website still refreshes on its schedule or a manual run.
 
 ### Setup
