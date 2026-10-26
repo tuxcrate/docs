@@ -52,7 +52,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Build docs
-        uses: docker://zensical/zensical:0.0.72
+        uses: docker://zensical/zensical:0.0.73
         env:
           GH_TOKEN: ${{ github.token }}
         with:
