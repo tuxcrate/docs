@@ -36,7 +36,9 @@ It then validates the tracks and aliases before building or publishing any image
 There is no configurable metadata path or workflow-version fallback.
 
 The `Containerfile` receives each track's exact version pin as `APP_VERSION`.
-It must pin the application to that version and run its own build-time smoke tests.
+It must pin the application to that version. Keep installation assertions in the
+Containerfile where useful; put startup/shutdown tests in a host-side
+[`tests/smoke.sh` hook](container-tests.md), without copying it into the image.
 Keep the version or full APT package pin in `meta.yaml` and update it through a reviewed PR.
 
 ### Shared tooling and integration inputs
@@ -78,8 +80,8 @@ For local authenticated builds, add
 
 ### Behavior and tags
 
-- PRs build both platforms using QEMU.
-  Same-repository PRs publish test images to a separate `ghcr.io/<caller repository>-pr` package; fork PRs remain build-only, with no registry login.
+- PRs build both platforms using QEMU, export a local OCI archive, and test each platform before any registry upload.
+  Same-repository PRs then publish test images to a separate `ghcr.io/<caller repository>-pr` package; fork PRs build and test locally, with no registry login or upload.
   PRs never create GitHub releases or update production aliases.
   The Containerfile's `RUN` assertions execute on both architectures; no host ZFS kernel module is needed for zrepl's smoke tests.
 - Default-branch pushes, schedules, and manual runs rebuild without layer cache, pull the configured base image reference, and publish to GHCR using `GITHUB_TOKEN`.
@@ -93,7 +95,14 @@ For local authenticated builds, add
   For example, tags `["${version}", "${major}.${minor}", latest]` publish `0.7.0`, `0.7`, and `latest` for `0.7.0`.
   Prereleases may use named aliases such as `preview`, never stable aliases.
   Multiple current releases can share the same default branch through tracks.
-- The image is first uploaded by digest, with BuildKit provenance and an SBOM, so failed builds never publish named release tags.
+- Each track follows **build → test → publish**. BuildKit exports an OCI archive,
+  including provenance and SBOMs, without pushing it. The shared runner loads each
+  platform from that archive and invokes the optional repository-root
+  `tests/smoke.sh` hook, then validates final-image OS metadata locally.
+  Only after those checks pass does the workflow log in and upload the unchanged
+  archive by digest. Failed builds or tests upload no image manifests or layers
+  to GHCR and do not move preview or production tags. The GitHub Actions build
+  cache is separate from image publication.
 - A draft GitHub release reserves the next revision before tagging the image.
   Successful publication publishes the release, creating `v0.7.0-rN` at the exact source commit.
   GitHub release notes contain the digest, platforms, and linked packaging commits since the previous published image release.
@@ -110,7 +119,7 @@ For local authenticated builds, add
   The image's entrypoint is not run. Missing or invalid OS identifiers fail metadata generation rather than publishing guessed values.
   PR builds generate a temporary, synthetic `release.json` using the same metadata generation and validation as real releases, including for fork PRs that cannot publish images.
   Validation checks all required fields, including OS metadata from a locally loaded image of the first declared platform. Empty or invalid required values fail the job.
-  This fixture uses revision `r0` and the local image ID as its digest. It stays in the runner's temporary directory and does not reserve a revision, create a GitHub release, or publish release tags.
+  This fixture uses placeholder revision `r0` and the real tested OCI archive digest. It stays in the runner's temporary directory and does not reserve a revision, create a GitHub release, or publish release tags.
   The GitHub release's `published_at` is the authoritative publication timestamp.
   Draft assets are not published versions.
 - Prerelease versions create GitHub prereleases and never become GitHub's latest release.
@@ -151,7 +160,7 @@ Preview builds retain uncached multiarch smoke tests, provenance, and SBOMs, but
 The shared cleanup workflow removes closed-PR previews when installed as described below.
 
 After a successful push, the workflow posts pull commands, the tested merge commit, platforms, image digest, and a build link in the PR.
-The same comment includes the generated `release.json` in a collapsed section labeled as synthetic validation metadata, with a note that its revision and digest are placeholders.
+The same comment includes the generated `release.json` in a collapsed section labeled as synthetic validation metadata. Its revision is a placeholder; its digest identifies the tested multiarchitecture artifact.
 Subsequent builds update the same bot-authored comment for each track.
 Fork PRs do not receive image comments because they do not publish images.
 
