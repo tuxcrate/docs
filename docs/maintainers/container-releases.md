@@ -82,7 +82,9 @@ For local authenticated builds, add
   Same-repository PRs then publish test images to a separate `ghcr.io/<caller repository>-pr` package; fork PRs build and test locally, with no registry login or upload.
   PRs never create GitHub releases or update production aliases.
   The Containerfile's `RUN` assertions execute on both architectures; no host ZFS kernel module is needed for zrepl's smoke tests.
-- Default-branch pushes, schedules, and manual runs rebuild without layer cache, pull the configured base image reference, and publish to GHCR using `GITHUB_TOKEN`.
+- Default-branch pushes build and publish only tracks whose build or publication inputs differ from their last successfully published release.
+  Scheduled and manual runs always rebuild every active track, even when its source is unchanged.
+  Builds run without layer cache, pull the configured base image reference, and publish to GHCR using `GITHUB_TOKEN`.
   A digest-pinned base stays fixed until a source update (such as a Renovate digest-update PR) is merged.
 - Outside PR previews, other branches and other event types cannot publish.
   Do not add `pull_request_target` as a publishing trigger.
@@ -402,6 +404,71 @@ The following rules apply to all tracks:
   Do not repurpose a former exact-version alias for another application version.
   Use only one publishing caller/configuration per image repository.
 
+### Skipping unchanged releases
+
+Before a default-branch push builds production images, the shared workflow runs
+`container-release release-plan`. It compares each active track with its newest
+published GitHub release, using the release's Git tag to read historical files.
+Drafts do not count as successful publication. A failed release therefore leaves
+its source changes eligible for the next push, including a subsequent docs-only
+commit. No new release assets or historical metadata changes are needed.
+
+The comparison includes:
+
+- Effective per-track build and publication settings: application and image
+  versions, base-image pin, build arguments, paths, platforms, destination image,
+  tags, and prerelease status.
+- Git-tracked files in the build context, including file names, contents, symlink
+  targets, additions, deletions, and executable modes. Docker ignore patterns and
+  negations apply; a Containerfile-specific `.dockerignore` takes precedence over
+  the context's `.dockerignore`.
+- The Containerfile and active ignore file, even if excluded by ignore patterns
+  or located outside the context, plus repository-root `tests/` files used for
+  host-side smoke testing.
+
+There is no implicit exclusion for README files or metadata: a Containerfile may
+use `COPY .`. Image repositories should explicitly keep non-build files out of
+their context, for example with this root `.dockerignore`:
+
+```text
+.git
+.github
+README.md
+LICENSE
+renovate.json
+meta.yaml
+tests
+```
+
+Excluding `meta.yaml` from the context lets the comparison use each track's
+effective settings instead of treating every metadata edit as a change to every
+track. Do not exclude files that the Containerfile needs to copy. Smoke tests
+remain release inputs despite the `tests` exclusion because they run on the host.
+Without an applicable exclusion, a tracked context file conservatively triggers
+a rebuild even if the Containerfile does not currently copy it.
+
+The planner records each track's build/skip decision in the workflow summary.
+When every track is unchanged, it skips the production build matrix entirely:
+no registry upload, revision reservation, tag movement, release, or website
+notification occurs. PRs still build and test every active track as before.
+New tracks, missing historical files, older unsupported metadata formats, and
+layouts that cannot be compared safely (such as symlinked Containerfiles or
+ignore files) cause a rebuild rather than a skip. Release-history API failures
+fail planning instead of silently treating a lookup error as unchanged inputs.
+
+This detects source-input changes, not identical runtime contents. Image digests
+are unsuitable for this check because revision labels, timestamps, and
+attestations can change without meaningful application changes. Dependencies
+downloaded during a build can also change without a packaging commit. Scheduled
+and manual runs deliberately bypass the comparison to refresh these dependencies
+and to repair publication failures or aliases. Shared-tooling updates alone do
+not trigger a caller push; use a manual or scheduled run to apply them.
+
+Publish the shared workflow and tooling before rolling out caller ignore files.
+Adding an ignore file is itself a build-input change and produces a release.
+
+### Required PR validation
+
 PR builds are uncached on every configured platform so an earlier build cannot hide a missing APT package.
 Require `container / pull-request-check` in GitHub branch protection/rulesets, not individual matrix-track checks.
 This fixed aggregate check succeeds only when planning and every active track build succeed;
@@ -521,7 +588,8 @@ The preview cleanup CLI lives in `cmd/container-pr-cleanup`; use `-dry-run` with
 It is written in Go and uses `go.yaml.in/yaml/v3` for strict YAML parsing.
 The workflow compiles it using the Go toolchain provided by the Ubuntu runner; Go 1.23 or newer is required.
 Build it with `go build -o /path/to/container-release ./cmd/container-release`.
-Run the binary from the container source checkout with `plan`, `metadata`, `manifest`, or `reserve` and the required workflow environment variables set.
+Run the binary from the container source checkout with `plan`, `release-plan`, `metadata`, `manifest`, or `reserve` and the required workflow environment variables set.
+`release-plan` is read-only: on push events it needs full Git history, `GH_TOKEN`, and release-list access; it emits a filtered `matrix` and a `changed` boolean to `GITHUB_OUTPUT`.
 Publication commands receive `APP_VERSION` (the application version, without an APT package revision), `IMAGE_VERSION` (the expanded version tag), and `TAGS` (a JSON array of expanded moving tags) from the planner's build matrix.
 Only the Containerfile's build argument receives a full APT package pin.
 The `plan` command always reads `meta.yaml` from the current directory; it has no alternate path or environment fallback.
