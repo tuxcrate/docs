@@ -30,21 +30,19 @@ jobs:
     secrets: inherit
 ```
 
-Every caller repository must contain `meta.yaml` in its root, even for single-track images.
-The workflow checks for this file before building the release tooling.
-It then validates the tracks and aliases before building or publishing any images.
+Every caller repository must contain `meta.yaml` in its root, including single-track images.
+The workflow checks for this file before building the release tooling, then validates the tracks and aliases before building or publishing any images.
 There is no configurable metadata path or workflow-version fallback.
 
 The `Containerfile` receives each track's exact version pin as `APP_VERSION`.
-It must pin the application to that version. Keep installation assertions in the
-Containerfile where useful; put startup/shutdown tests in a host-side
+It must install that exact version. Keep useful installation assertions in the
+Containerfile and put startup and shutdown tests in a host-side
 [`tests/smoke.sh` hook](container-tests.md), without copying it into the image.
 Keep the version or full APT package pin in `meta.yaml` and update it through a reviewed PR.
 
 ### Shared tooling and integration inputs
 
-Image build settings come only from `meta.yaml`.
-Workflow inputs cannot set them.
+Set image build settings in `meta.yaml`; workflow inputs cannot set them.
 All repositories use the same defaults: `ghcr.io/<caller repository>`, context `.`, root `Containerfile`, and `linux/amd64,linux/arm64`.
 Metadata can override these for individual tracks; the caller workflow stays the same.
 
@@ -95,7 +93,7 @@ For local authenticated builds, add
   For example, tags `["${version}", "${major}.${minor}", latest]` publish `0.7.0`, `0.7`, and `latest` for `0.7.0`.
   Prereleases may use named aliases such as `preview`, never stable aliases.
   Multiple current releases can share the same default branch through tracks.
-- Each track follows **build → test → publish**. BuildKit exports an OCI archive,
+- Each track is built and tested before publication. BuildKit exports an OCI archive,
   including provenance and SBOMs, without pushing it. The shared runner loads each
   platform from that archive and invokes the optional repository-root
   `tests/smoke.sh` hook, then validates final-image OS metadata locally.
@@ -104,11 +102,11 @@ For local authenticated builds, add
   to GHCR and do not move preview or production tags. The GitHub Actions build
   cache is separate from image publication.
 - A draft GitHub release reserves the next revision before tagging the image.
-  Successful publication publishes the release, creating `v0.7.0-rN` at the exact source commit.
+  On success, the workflow publishes the release and creates `v0.7.0-rN` at the exact source commit.
   GitHub release notes contain the digest, platforms, and linked packaging commits since the previous published image release.
 - The release CLI lists all new commit subjects with commit links, oldest first, using `git log`.
   Conventional Commits are not required.
-  The first release includes all history; rebuilds without new commits are identified explicitly.
+  The first release includes all history; release notes identify rebuilds that have no new commits.
 - All releases are serialized across trigger types.
   Revision selection includes both Git tags and all GitHub releases, including drafts and paginated history.
 - Stale default-branch runs fail before reserving a revision, preventing aliases from moving backwards.
@@ -116,7 +114,7 @@ For local authenticated builds, add
 - Each release includes a versioned `release.json` asset with the image, track, application version, revision, digest, source commit, platforms, and historical aliases.
   It also includes `os_flavor` (such as `alpine` or `debian`) and `os_version`, read from the final image by digest on the first declared platform, not inferred from the base image tag.
   These use `ID` and `VERSION_ID` from `/etc/os-release` (falling back to `/usr/lib/os-release`); Debian uses `/etc/debian_version` when available to include the point release, such as `13.7`.
-  The image's entrypoint is not run. Missing or invalid OS identifiers fail metadata generation rather than publishing guessed values.
+  Metadata generation does not run the image's entrypoint and fails if OS identifiers are missing or invalid.
   PR builds generate a temporary, synthetic `release.json` using the same metadata generation and validation as real releases, including for fork PRs that cannot publish images.
   Validation checks all required fields, including OS metadata from a locally loaded image of the first declared platform. Empty or invalid required values fail the job.
   This fixture uses placeholder revision `r0` and the real tested OCI archive digest. It stays in the runner's temporary directory and does not reserve a revision, create a GitHub release, or publish release tags.
@@ -156,7 +154,7 @@ The preview package always derives from the caller repository, regardless of any
 docker pull ghcr.io/tuxcrate/zrepl-pr:pr-12-stable
 ```
 
-Preview builds retain uncached multiarch smoke tests, provenance, and SBOMs, but do not allocate release revisions, publish GitHub releases, move production aliases, or notify the website.
+Preview builds include uncached multiarch smoke tests, provenance, and SBOMs. They do not allocate release revisions, publish GitHub releases, move production aliases, or notify the website.
 The shared cleanup workflow removes closed-PR previews when installed as described below.
 
 After a successful push, the workflow posts pull commands, the tested merge commit, platforms, image digest, and a build link in the PR.
@@ -221,31 +219,31 @@ The daily schedule catches older closed PRs, missed events, and previews left by
 Manual runs default to dry-run mode; inspect their logs before disabling it to perform deletion.
 No organization-wide token or additional secret is needed.
 
-The caller repository's `GITHUB_TOKEN` needs **admin access to its `-pr` package** to delete versions, in addition to the workflow's `packages: write` permission.
-Packages created by that repository's workflow normally grant this automatically; check the package's **Manage Actions access** settings for existing packages.
+The caller repository's `GITHUB_TOKEN` needs admin access to its `-pr` package to delete versions, in addition to the workflow's `packages: write` permission.
+Packages created by that repository's workflow normally grant this automatically; check the package's Manage Actions access settings for existing packages.
 Production publishing access alone does not establish access to the separate preview package.
-GitHub can report inaccessible packages as not found; a missing/inaccessible package is logged and skipped, so verify package access if previews remain.
+GitHub can report inaccessible packages as not found. Cleanup logs and skips missing or inaccessible packages, so verify package access if previews remain.
 
 Cleanup is limited to `ghcr.io/<caller repository>-pr`, even when production uses an overridden image name.
-It deletes entire package versions, not merely tag names:
+It deletes entire package versions, including their tags:
 
 - All tags on a tagged version must identify closed PRs. Open-PR images and versions with unknown tags are retained.
 - Eligible image roots are processed oldest first using their creation timestamp (with a version-ID tie-breaker). If no tagged version would otherwise remain, the newest eligible tagged image and its complete manifest graph are retained because GHCR rejects deletion of the last tagged version. Once a newer preview exists, a subsequent sweep can remove the older retained image. This does not delete or recreate the package, so its visibility and access settings remain intact.
 - The registry's manifest graph identifies associated platform images and provenance/SBOM attestations. Descendants still referenced by retained images are preserved.
-- New preview indexes carry repository and PR annotations, allowing cleanup to recognize untagged indexes left by reruns. Older untagged images without provable PR ownership are retained rather than guessed from timestamps.
+- New preview indexes carry repository and PR annotations, allowing cleanup to recognize untagged indexes left by reruns. Cleanup retains older untagged images when PR ownership cannot be proven; timestamps alone do not establish ownership.
 - Discovery and PR-state checks must succeed before deletion. Cleanup rechecks closed PRs and the package snapshot before deleting; changed state aborts the run for a later retry.
 - Children are deleted before their index so a partial failure leaves its ownership discoverable on a retry. Registry-managed blobs are not deleted individually.
 
 The close-event cleanup shares the PR build's concurrency group, so it waits for that PR's active build.
 Scheduled sweeps can overlap other PR builds; the snapshot check detects changes during discovery, and a later sweep catches previews published after a cleanup run.
 Production packages, Git tags, GitHub releases, and the preview package itself are never deleted.
-GitHub package deletion restrictions, such as public versions exceeding GitHub's download threshold, fail the run rather than bypassing protection.
+The run fails if GitHub blocks deletion, for example when a public version exceeds GitHub's download threshold. Cleanup does not bypass these restrictions.
 
 Cleanup uses ordinary `pull_request: closed` events, not `pull_request_target`; no opt-out from GitHub's public-repository event policy is needed.
 The caller and shared job both skip fork close events, keeping fork tokens read-only.
 The workflow checks out trusted shared tooling, never caller or PR sources, and never builds or executes PR code.
 Do not pass an untrusted PR ref as `shared-ref`.
-The shared workflow temporarily also accepts existing same-repository `pull_request_target: closed` callers so the shared change can be published before migrating callers; replace that trigger with the example above to avoid GitHub's November 2, 2026 policy restriction.
+The shared workflow also temporarily accepts existing same-repository `pull_request_target: closed` callers, allowing the shared change to be published before callers migrate. Replace that trigger with the example above to avoid GitHub's November 2, 2026 policy restriction.
 
 ### Required root metadata and release tracks
 
@@ -294,7 +292,6 @@ Tracks with a prerelease suffix but no explicit `prerelease: true` are not filte
 Skipped tracks are still validated, including tag ownership; equal versions remain subject to the existing ownership checks.
 Existing images, tags, and releases are left unchanged.
 
-The APT and PyPI datasource restrictions below remain unchanged.
 Supported datasources are:
 
 - `deb`: Debian package `depName`, HTTP(S) `registryUrl` with `suite`, `components`, and `binaryArch` query parameters, and full stable `X.Y.Z-N` package `version`.
@@ -377,7 +374,7 @@ Deploy website schema support before publishing schema version 2 releases, and c
 Old registry tags remain until explicitly retired; adding suffixed tags alone does not hide historical unsuffixed prerelease tags from Renovate.
 If existing images are retagged into the new revision namespace, also reserve those revisions with matching Git tags at their original source commits so future releases cannot reuse them.
 
-Rules:
+The following rules apply to all tracks:
 
 - All tracks live on the default branch.
   PRs validate the complete configuration and build every track, publishing previews only when eligible.
@@ -461,9 +458,8 @@ Publish the preset and shared tooling before migrating caller repositories.
 ### Website integration
 
 The website can read `release.json` assets from public GitHub releases and resolve all current tags directly against GHCR.
-Historical alias lists record assignments at publication time.
-They do not show current assignments.
-Releases created before this metadata was added remain valid; the website lists them without adding data it does not have.
+Historical alias lists record assignments at publication time, which may differ from current assignments.
+Releases created before this metadata was added remain valid; the website lists them with only the data available.
 
 For immediate refreshes, forward the organization's `DOCS_TOKEN` secret in the caller job.
 The shared workflow defaults to notifying `tuxcrate/docs`, and `shared-ref` already defaults to `main`:
@@ -491,12 +487,12 @@ The old explicit `docs-token` mapping remains supported for existing callers and
 Secrets stored only in the shared workflow repository are not available to callers.
 The caller's `GITHUB_TOKEN` cannot dispatch to a different repository.
 Never pass the website token into builds or PR jobs.
-One notification is sent after all release tracks finish successfully; PR builds and failed releases do not notify.
+The workflow sends one notification after all release tracks finish successfully; PR builds and failed releases do not notify.
 A missing token produces a warning.
 If the notification fails, the release still succeeds; the website refreshes on its hourly schedule.
-Configure `DOCS_TOKEN` as a repository secret, or an organization secret available to each caller.
+You can also configure `DOCS_TOKEN` as a repository secret.
 Set `with.docs-repository: ''` to disable notifications, or override it to notify another repository.
-Without this optional token, the website still refreshes on its schedule or a manual run.
+Manual runs can also refresh the website without this token.
 
 ### Setup
 

@@ -8,7 +8,7 @@ from the [image-page front matter](website.md#image-pages).
 
 ## Local validation
 
-State and plans use OpenTofu encryption. Provide `state_passphrase` securely and
+OpenTofu encrypts state and plans. Provide `state_passphrase` securely and
 keep it out of Git. GitHub authentication comes from `GITHUB_TOKEN`.
 
 Validate without applying changes:
@@ -20,7 +20,7 @@ tofu validate
 ```
 
 The infrastructure Actions workflow checks formatting only; it does not plan
-or apply organization changes. Review the plan before applying any changes.
+or apply organization changes. Review a plan before applying changes.
 
 ## Importing existing repositories
 
