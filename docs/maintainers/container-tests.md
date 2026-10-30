@@ -150,8 +150,15 @@ docker buildx build --pull --no-cache --platform linux/amd64 --load \
 bash tests/smoke.sh tuxcrate-local:test "$APP_VERSION" linux/amd64
 ```
 
-To reproduce the shared artifact path, install Bash, Docker/Buildx, Skopeo, jq,
-GNU coreutils, and QEMU/binfmt support for non-native execution. Use a Buildx
+To reproduce the shared artifact path on Linux, install Go, Bash, Docker/Buildx,
+Skopeo, and QEMU/binfmt support for non-native execution. Build the shared Go
+command once (from the `github-actions` checkout):
+
+```sh
+go build -o /path/to/container-artifact ./cmd/container-artifact
+```
+
+Then run the following from the image repository. Use a Buildx
 builder that supports the OCI exporter, such as the `docker-container` driver:
 
 ```sh
@@ -161,7 +168,7 @@ docker buildx build --pull --no-cache --platform linux/amd64,linux/arm64 \
   --build-arg BASE_IMAGE="$BASE_IMAGE" \
   --build-arg BUILDKIT_DOCKERFILE_CHECK=skip=InvalidDefaultArgInFrom \
   --file Containerfile --output type=oci,dest=/path/to/image.tar .
-bash /path/to/github-actions/scripts/container-artifact.sh test \
+/path/to/container-artifact test \
   /path/to/image.tar linux/amd64,linux/arm64 "$APP_VERSION"
 ```
 
