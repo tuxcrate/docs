@@ -1,9 +1,9 @@
 # Container runtime tests
 
-Container repositories can provide `tests/smoke.sh` to test their final images
-without shipping test scripts, fixtures, databases, or startup side effects in
-image layers. The shared container workflow runs the script on the Linux CI
-runner, not inside the image build.
+Container repositories can provide `tests/smoke.sh` to test their final images.
+The shared container workflow runs the script on the Linux CI runner, outside
+the image build, so test scripts, fixtures, databases, and startup side effects
+stay out of image layers.
 
 ## Build, test, then publish
 
@@ -31,20 +31,20 @@ An unsuccessful build or test never uploads image manifests or layers to GHCR.
 BuildKit's GitHub Actions cache may still be written; it is not a published
 container image. A later publication failure can leave an untagged registry
 artifact or draft release, as described in [Container releases](container-releases.md).
-The ordering applies per track: one failing track does not prevent another
-independent track from completing.
+This order applies to each track independently, so one failing track does not
+prevent another from completing.
 
 Fork PRs use the same local build and test path but never log in or upload.
 Do not use `pull_request_target` to run these tests or publish PR code.
 
 The shared helper records a successful test receipt next to the archive and
 checks its checksum before uploading. Missing receipts or modified archives
-fail publication. This is an accidental-misuse guard, not a security boundary
-against malicious code already executing on the runner.
+fail publication. These checks guard against accidental misuse; they cannot
+protect against malicious code already executing on the runner.
 
 ## Hook interface
 
-Create a regular file at the **repository root's** `tests/smoke.sh`, regardless
+Create a regular file at the repository root's `tests/smoke.sh`, regardless
 of a track's build context. It does not need an executable bit: the runner calls
 it with Bash from the repository root:
 
@@ -69,14 +69,14 @@ followed by a 30-second termination grace period. Hooks should use shorter
 readiness and shutdown limits and their own cleanup traps.
 
 Repositories without a hook keep their existing Containerfile assertions and
-receive platform and OS-metadata validation, but **do not receive an
-application-specific runtime smoke test**. This compatibility behavior allows
-repositories to migrate individually; CI prints the missing-hook notice.
+receive platform and OS-metadata validation, but no application-specific runtime
+smoke test. Repositories can therefore migrate individually; CI prints a notice
+when the hook is missing.
 
 ## Writing a test
 
 Run the production entrypoint as the image's configured user. Do not override
-it merely to make startup pass. Check readiness through an application endpoint
+it to make startup pass. Check readiness through an application endpoint
 where available, check the installed version, and confirm graceful shutdown.
 Check runtime ownership, writable configuration directories, licenses, and
 required tools as appropriate for the application.
@@ -123,11 +123,11 @@ docker stop --time 30 "$container" >/dev/null
 test "$(docker wait "$container")" = 0
 ```
 
-This skeleton is not a complete smoke test until readiness and version checks
-are implemented. The three application repositories contain working examples.
+Add readiness and version checks to complete this smoke test. The Sonarr,
+Radarr, and Prowlarr repositories contain working examples.
 On failure, print the failed check, container state, logs, and relevant file
-listings before removing the container. Keep failures meaningful: retry transient
-readiness conditions, not version mismatches or failed assertions after startup.
+listings before removing the container. Retry transient readiness conditions;
+version mismatches and failed assertions after startup should fail immediately.
 
 Hooks run host-side with Docker access and have the same contributor trust
 requirements as Containerfiles. The helper unsets `GH_TOKEN` and `GITHUB_TOKEN`
@@ -180,13 +180,13 @@ Remove the archive and its `.tested` receipt when they are no longer needed.
 
 ## Migrating an image repository
 
-Publish the shared workflow and helper changes **before** migrating callers.
+Publish the shared workflow and helper changes before migrating callers.
 For pinned workflows, keep `uses` and `with.shared-ref` on the same published
 ref. Do not disable existing startup tests until the shared hook is available.
 
 Convert the old build-time test to a host-side Docker test. Remove the
 Containerfile's smoke-test `COPY` and `RUN` instructions, and remove any
-test-only dependencies or fixtures from the final image. Keep meaningful
-installation assertions where useful. No new workflow inputs or `meta.yaml`
+test-only dependencies or fixtures from the final image. Keep useful
+installation assertions. No new workflow inputs or `meta.yaml`
 fields are needed. Require successful PR validation on both configured
 architectures before merging the migration.

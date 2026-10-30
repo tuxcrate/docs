@@ -17,7 +17,7 @@ If your repository uses Tuxcrate images, add the standalone `tuxcrate` preset to
 It supports `X.Y.Z-rN` and `X.Y.Z.W-rN` image tags from `ghcr.io/tuxcrate/**`, including numeric revision updates such as `-r9` to `-r10`.
 Image revision changes are patch updates.
 Floating aliases and prerelease tags are excluded.
-Numeric upstream prereleases must use suffixed image tags such as `5.0.0.2668-prerelease-r0`, rather than stable-looking `5.0.0.2668-r0` tags.
+Numeric upstream prereleases must use suffixed image tags such as `5.0.0.2668-prerelease-r0`; tags such as `5.0.0.2668-r0` look like stable releases.
 Image repositories configure this with `tags: ["${version}-prerelease", ...]`; the upstream pin stays numeric.
 Historical unsuffixed prerelease tags must be retired separately or consumers can still discover them.
 
@@ -50,8 +50,7 @@ For container repositories, require successful uncached builds on both supported
 }
 ```
 
-The image preset includes the default policy.
-It also:
+The image preset includes the default policy and adds these rules:
 
 - Pins Docker image dependencies to digests.
 - Updates each track's complete `baseImage: image:tag@sha256:...` reference in `meta.yaml`, retaining Docker tag suffixes such as `-slim`.
@@ -63,17 +62,16 @@ It also:
 - Keeps the shared `tuxcrate/github-actions` workflow on its coordinated tooling ref without pinning it independently to a digest.
   If pinning the workflow manually, keep its `uses` ref and `shared-ref` input identical.
 
-APT discovery checks only the configured architecture.
-For zrepl this is `amd64`.
-Require successful uncached `linux/amd64` and `linux/arm64` PR builds before merging; rerun a failed build if upstream publishes the second architecture later.
-Discovery does not confirm that the package is available for both architectures.
+APT discovery checks only the configured architecture, which is `amd64` for zrepl.
+It does not confirm that the package is available for both architectures, so require successful uncached `linux/amd64` and `linux/arm64` PR builds before merging.
+Rerun a failed build if upstream publishes the second architecture later.
 
-The Renovate extractor can discover other datasources too.
+The Renovate extractor also supports other datasources.
 The shared release planner accepts other datasource identifiers with a nonempty dependency name and a supported three- or four-part application version.
 Additional sources still need compatible version rules and Containerfile installation logic.
 Custom JSONata dependencies otherwise default to `semver-coerced` versioning unless a package rule overrides it.
 Sonarr uses `github-releases`, strips the leading `v` from release tags, and uses `loose` versioning for its four-part versions.
-Its stable track ignores upstream prereleases; develop opts into them without following GitHub's latest stable release.
+Its stable track ignores upstream prereleases; the develop track opts into them without following GitHub's latest stable release.
 Image builds verify the upstream release's prerelease flag and branch-specific assets, rejecting a release from the wrong channel.
 
 See [container releases](container-releases.md) for the metadata schema.
