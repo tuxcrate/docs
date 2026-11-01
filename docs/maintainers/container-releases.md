@@ -174,6 +174,8 @@ For local authenticated builds, add
 - A draft GitHub release reserves the next revision **before building** the image,
   allowing the exact revision to be embedded during the build. Its initial body
   identifies the source commit and track and states that publication is pending.
+  Reservation also returns the numeric GitHub release ID. Finalization retrieves
+  the draft by this ID, since GitHub's get-by-tag endpoint excludes draft releases.
   After tests and upload, `container-release finalize` verifies the draft still
   belongs to this commit and track, rechecks revision-tag availability, and fills
   its notes with the tested digest and final-image OS metadata. It does not
@@ -193,6 +195,10 @@ For local authenticated builds, add
   These use `ID` and `VERSION_ID` from `/etc/os-release` (falling back to `/usr/lib/os-release`); Debian uses `/etc/debian_version` when available to include the point release, such as `13.7`.
   Metadata generation does not run the image's entrypoint and fails if OS identifiers are missing or invalid.
   PR builds generate a temporary, synthetic `release.json` using the same metadata generation and validation as real releases, including for fork PRs that cannot publish images.
+  They also rehearse revision reservation and draft finalization against the
+  tested local image. A fake GitHub API models draft lookup by release ID and
+  rejects draft lookup by tag, so that failure is caught before merge. The
+  rehearsal never creates or edits real releases or contacts the registry.
   Validation checks all required fields, including OS metadata from a locally loaded image of the first declared platform. Empty or invalid required values fail the job.
   This fixture uses placeholder revision `r0` and the real tested OCI archive digest. It stays in the runner's temporary directory and does not reserve a revision, create a GitHub release, or publish release tags.
   The GitHub release's `published_at` is the authoritative publication timestamp.
@@ -676,9 +682,9 @@ Publication commands receive `APP_VERSION` (the application version, without an 
 Only the Containerfile's build argument receives a full APT package pin.
 The `plan` command always reads `meta.yaml` from the current directory; it has no alternate path or environment fallback.
 The `reserve` command creates a real draft release before building and does not
-require `IMAGE_DIGEST`. Its outputs include `tag`, `tags`, `package-version`,
+require `IMAGE_DIGEST`. Its outputs include `release-id`, `tag`, `tags`, `package-version`,
 and `latest`. After upload, `finalize` takes
-`RELEASE_TAG`, `IMAGE_DIGEST`, and `PLATFORMS` alongside the publication inputs
+`RELEASE_ID`, `RELEASE_TAG`, `IMAGE_DIGEST`, and `PLATFORMS` alongside the publication inputs
 to fill that draft's release notes. Both commands modify GitHub releases;
 use `go test` for validation without publishing.
 
