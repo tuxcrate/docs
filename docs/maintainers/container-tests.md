@@ -24,6 +24,9 @@ a preview package version without creating releases or consuming revisions.
    the track; there is no automatic retry of the entire test.
 4. Validate release metadata, including OS identification from the first tested
    platform image, before any upload.
+   PRs also run one release-lifecycle rehearsal against that local image and a
+   fake GitHub API, exercising reservation, draft finalization, and metadata
+   generation without publishing anything.
 5. Log in to GHCR and copy the original archive by digest with
    `skopeo copy --all --preserve-digests`. This preserves the multiarchitecture
    index, platform manifests, annotations, provenance, and SBOMs. There is no
@@ -69,6 +72,12 @@ exposes packaging metadata, verify it matches this value, independently of
 author link that the application does not actually read. Sonarr, Radarr, and
 Prowlarr check their authenticated status APIs using the disposable instance's
 generated API key.
+
+The status request retries up to four times with a ten-second socket timeout per
+request, allowing for slow first requests under QEMU. Once a request succeeds,
+missing or incorrect package metadata fails immediately; it is not retried.
+Failure diagnostics print the request exit status or the expected and actual
+package field, without dumping unrelated API response data or the API key.
 
 The same script handles all tracks. Use the expected version argument instead
 of hard-coding a release. Helpers and fixtures may live elsewhere under `tests/`;
