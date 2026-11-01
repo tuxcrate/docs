@@ -73,6 +73,10 @@ author link that the application does not actually read. Sonarr, Radarr, and
 Prowlarr check their authenticated status APIs using the disposable instance's
 generated API key.
 
+These three hooks use `jq` on the host to check both package fields in one JSON
+assertion. The Ubuntu CI runner already includes it; install `jq` alongside
+Docker when running these hooks locally. It is not added to the runtime images.
+
 The status request retries up to four times with a ten-second socket timeout per
 request, allowing for slow first requests under QEMU. Once a request succeeds,
 missing or incorrect package metadata fails immediately; it is not retried.
