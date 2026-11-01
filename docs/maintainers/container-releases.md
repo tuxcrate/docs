@@ -49,16 +49,64 @@ identity; Sonarr, Radarr, and Prowlarr expose it in System → Status alongside 
 Tuxcrate link. Their local builds fall back to `<APP_VERSION>-local` when the
 argument is omitted. Never use `PACKAGE_VERSION` to select upstream downloads.
 
-All images built by the shared workflow carry these labels:
+### Image labels and annotations
+
+The shared workflow explicitly sets these three labels on every platform image,
+for both production and PR builds:
 
 | Label | Production value | PR value |
 | --- | --- | --- |
+| `org.opencontainers.image.source` | Caller repository URL, such as `https://github.com/tuxcrate/sonarr` | Same caller repository URL, not the separate preview package URL |
 | `org.opencontainers.image.version` | Full immutable image tag, including `-rN` | Full preview package version |
 | `org.opencontainers.image.revision` | Source Git commit SHA | Tested merge commit SHA |
 
 The OCI revision label remains the source-control revision; the version label
 includes the image rebuild counter. Labels are set for every track, even when
 the Containerfile does not consume `PACKAGE_VERSION`.
+
+For example, a production Sonarr image might have version `4.0.20.3014-r1`,
+while PR 12's stable track might have version
+`4.0.20.3014-pr-12-stable-abcdef0`. The revision label contains the full Git SHA
+in either case, never `r1`. The source label points to the packaging repository,
+not the upstream Sonarr repository or `tuxcrate.com`.
+
+These are image-configuration labels, available under `Config.Labels` in
+`docker image inspect`. They are not automatically annotations on the
+multiarchitecture OCI index. After pulling an image, inspect its labels with:
+
+{% raw %}
+```sh
+docker pull ghcr.io/tuxcrate/sonarr:latest
+docker image inspect --format '{{json .Config.Labels}}' ghcr.io/tuxcrate/sonarr:latest
+```
+{% endraw %}
+
+PR builds additionally set these **OCI index annotations**, including for fork
+PRs whose images remain local:
+
+| Annotation | Value | Purpose |
+| --- | --- | --- |
+| `io.tuxcrate.repository` | Caller repository, such as `tuxcrate/sonarr` | Identifies the repository that owns the preview |
+| `io.tuxcrate.pull-request` | PR number as a string, such as `12` | Identifies the PR that owns the preview |
+
+Preview cleanup uses these annotations to recognize untagged indexes left by
+reruns. They are not container labels and do not appear in `Config.Labels`.
+Production indexes do not receive these preview annotations. For a published
+preview, inspect the raw index with:
+
+```sh
+docker buildx imagetools inspect --raw ghcr.io/tuxcrate/sonarr-pr:pr-12-stable
+```
+
+The keys appear in the index's `annotations` mapping. The `index:` prefix in
+the workflow selects where Buildx writes them; it is not part of either key.
+
+Other labels may be inherited from the base image or set by a repository's
+Containerfile. The shared workflow does not explicitly set other predefined
+OCI keys such as `created`, `authors`, `url`, `documentation`, `vendor`, or
+`licenses`; do not assume those values are present. Provenance and SBOMs are
+separate attestations, not additional image labels. The predefined label meanings
+are described in the [OCI annotations specification](https://github.com/opencontainers/image-spec/blob/main/annotations.md).
 
 ### Shared tooling and integration inputs
 
