@@ -36,7 +36,6 @@ The normal layout is:
 
 ```text
 .github/workflows/container.yml
-.github/workflows/container-pr-cleanup.yml
 .dockerignore
 Containerfile
 LICENSE
@@ -131,12 +130,13 @@ pass credentials through build arguments or write them into images.
 
 ### Workflows
 
-Add the [shared container caller](container-releases.md#calling-the-workflow)
-and separate [PR-preview cleanup caller](container-releases.md#cleaning-up-pr-previews).
+Add the [shared container caller](container-releases.md#calling-the-workflow).
 Do not duplicate shared build, test, or publishing jobs. Keep `uses` and
 `shared-ref` coordinated when pinning shared tooling.
 
-PRs test all active tracks and platforms without moving production tags.
+PRs test all active tracks and platforms without moving production aliases.
+Same-repository PRs publish retained `pr-` tags into the production package;
+there is no automatic preview cleanup. Reserve this prefix for PR builds.
 Default-branch pushes can publish real releases. For an empty repository,
 a README-only default branch followed by a container PR keeps the first
 publication behind review. Do not push release workflows to the default branch
@@ -160,9 +160,8 @@ existing repositories before managing them through OpenTofu. Set and verify the
 GitHub About description and homepage, enable Renovate, and require
 `container / pull-request-check` before merging container changes.
 
-Verify GHCR visibility and Actions access for both production and preview
-packages. Preview cleanup needs package admin access. Do not assume a workflow
-token makes a newly created package public.
+Verify GHCR visibility and Actions write access for the shared production and
+preview package. Do not assume a workflow token makes a newly created package public.
 
 ## Validate and submit
 

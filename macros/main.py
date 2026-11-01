@@ -218,7 +218,7 @@ def collect_releases(repository: str, image: str) -> tuple[list[Metadata], list[
 
 
 def collect_tags(repository: str, image: str) -> dict[str, str]:
-    """Resolve registry tags to verified manifest digests."""
+    """Resolve non-PR registry tags to verified manifest digests."""
     query = urlencode({"service": "ghcr.io", "scope": f"repository:{repository}:pull"})
     credentials, _ = request(f"https://ghcr.io/token?{query}")
     headers = {
@@ -231,7 +231,7 @@ def collect_tags(repository: str, image: str) -> dict[str, str]:
             if not TAG.fullmatch(tag):
                 msg = "Invalid registry tag"
                 raise ValueError(msg)
-            if tag in tags:
+            if tag.startswith("pr-") or tag in tags:
                 continue
             _, response_headers = request(
                 f"https://ghcr.io/v2/{repository}/manifests/{quote(tag, safe='')}",
@@ -360,7 +360,9 @@ def gh_image_versions_data(name: str) -> Metadata:
             (
                 tag
                 for tag, digest in item["tags"].items()
-                if digest == release["digest"] and tag != release["immutableTag"]
+                if digest == release["digest"]
+                and tag != release["immutableTag"]
+                and not tag.startswith("pr-")
             ),
             key=lambda tag: (tag != release["version"], tag),
         )
