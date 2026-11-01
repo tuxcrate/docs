@@ -56,7 +56,7 @@ for both production and PR builds:
 
 | Label | Production value | PR value |
 | --- | --- | --- |
-| `org.opencontainers.image.source` | Caller repository URL, such as `https://github.com/tuxcrate/sonarr` | Same caller repository URL, not the separate preview package URL |
+| `org.opencontainers.image.source` | Caller repository URL, such as `https://github.com/tuxcrate/sonarr` | Same caller repository URL |
 | `org.opencontainers.image.version` | Full immutable image tag, including `-rN` | Full preview package version |
 | `org.opencontainers.image.revision` | Source Git commit SHA | Tested merge commit SHA |
 
@@ -89,13 +89,13 @@ PRs whose images remain local:
 | `io.tuxcrate.repository` | Caller repository, such as `tuxcrate/sonarr` | Identifies the repository that owns the preview |
 | `io.tuxcrate.pull-request` | PR number as a string, such as `12` | Identifies the PR that owns the preview |
 
-Preview cleanup uses these annotations to recognize untagged indexes left by
-reruns. They are not container labels and do not appear in `Config.Labels`.
+These annotations identify preview artifacts independently of their mutable
+tags. They are not container labels and do not appear in `Config.Labels`.
 Production indexes do not receive these preview annotations. For a published
 preview, inspect the raw index with:
 
 ```sh
-docker buildx imagetools inspect --raw ghcr.io/tuxcrate/sonarr-pr:pr-12-stable
+docker buildx imagetools inspect --raw ghcr.io/tuxcrate/sonarr:pr-12-stable
 ```
 
 The keys appear in the index's `annotations` mapping. The `index:` prefix in
@@ -147,7 +147,7 @@ For local authenticated builds, add
 ### Behavior and tags
 
 - PRs build both platforms using QEMU, export a local OCI archive, and test each platform before any registry upload.
-  Same-repository PRs then publish test images to a separate `ghcr.io/<caller repository>-pr` package; fork PRs build and test locally, with no registry login or upload.
+  Same-repository PRs then publish test images to the production package under `pr-` tags; fork PRs build and test locally, with no registry login or upload.
   PRs never create GitHub releases or update production aliases.
   The Containerfile's `RUN` assertions execute on both architectures; no host ZFS kernel module is needed for zrepl's smoke tests.
 - Default-branch pushes build and publish only tracks whose build or publication inputs differ from their last successfully published release.
@@ -225,22 +225,28 @@ Every eligible same-repository PR publishes two tags per track.
 For PR 12's stable track in `tuxcrate/zrepl`:
 
 ```text
-ghcr.io/tuxcrate/zrepl-pr:pr-12-stable
-ghcr.io/tuxcrate/zrepl-pr:pr-12-stable-<full-merge-commit-sha>
+ghcr.io/tuxcrate/zrepl:pr-12-stable
+ghcr.io/tuxcrate/zrepl:pr-12-stable-<full-merge-commit-sha>
 ```
 
 The first tag follows the PR.
 The second identifies the exact merge commit tested by `pull_request`, not just the PR branch's head commit.
 Rerunning the same commit may refresh OS packages and replace either tag; pin the image digest when an exact artifact is required.
 Tracks have separate tags to avoid collisions.
-The preview package always derives from the caller repository, regardless of any production `image` override in `meta.yaml`.
+Previews use the same package as production, including any `image` override in
+`meta.yaml`. The `pr-` prefix is reserved for PR previews and cannot be declared
+as a production moving tag.
 
 ```sh
-docker pull ghcr.io/tuxcrate/zrepl-pr:pr-12-stable
+docker pull ghcr.io/tuxcrate/zrepl:pr-12-stable
 ```
 
 Preview builds include uncached multiarch smoke tests, provenance, and SBOMs. They do not allocate release revisions, publish GitHub releases, move production aliases, or notify the website.
-The shared cleanup workflow removes closed-PR previews when installed as described below.
+Preview tags and artifacts are retained after PRs close; there is no automatic
+cleanup. Reruns can also leave untagged artifacts. Actual preview pulls contribute
+to the same package-wide download total as production pulls; retaining an image
+does not itself increase that total. The website excludes `pr-` tags from its
+release tables and tag selectors, even if they point to a production digest.
 
 After a successful push, the workflow posts pull commands, the tested merge commit, platforms, image digest, and a build link in the PR.
 The same comment includes the generated `release.json` in a collapsed section labeled as synthetic validation metadata. Its revision is a placeholder; its digest identifies the tested multiarchitecture artifact.
@@ -252,83 +258,25 @@ Fork PRs do not log in or push.
 Keep GitHub's default read-only token policy for fork PRs.
 Never switch to `pull_request_target` to publish fork code.
 Same-repository publishing uses `GITHUB_TOKEN` in the build job.
-The `-pr` package has a separate name, but this does not restrict what the token can access.
+Publishing previews to the production package does not restrict what the token can access.
 Only trusted contributors should be able to create branches in the repository.
 
-On first publication, set the new `-pr` package's visibility to public if anonymous pulls are intended.
-For an existing preview package, grant the caller repository Actions write access, just as for the production package.
+Set the shared package's visibility to public if anonymous pulls are intended,
+and grant the caller repository Actions write access for an existing package.
 
-### Cleaning up PR previews
+### Migrating from separate preview packages
 
-Add a separate `.github/workflows/container-pr-cleanup.yml` to each image repository:
+Deploy the website's `pr-` tag filtering before publishing previews into production
+packages. Remove `.github/workflows/container-pr-cleanup.yml` from every caller
+before removing the shared cleanup workflow and tooling, so scheduled callers
+cannot reference a deleted workflow. Then publish the updated shared container
+workflow, keeping pinned `uses` and `shared-ref` values coordinated.
 
-{% raw %}
-```yaml
-name: Clean up container PR previews
-
-on:
-  pull_request:
-    types: [closed]
-  schedule:
-    - cron: '41 3 * * *'
-  workflow_dispatch:
-    inputs:
-      dry-run:
-        description: Report matching images without deleting them
-        default: true
-        type: boolean
-
-permissions:
-  contents: read
-
-jobs:
-  cleanup:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    permissions:
-      contents: read
-      packages: write
-      pull-requests: read
-    uses: tuxcrate/github-actions/.github/workflows/container-pr-cleanup.yml@main
-    with:
-      dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run || false }}
-```
-{% endraw %}
-
-Publish the shared workflow and tooling before enabling callers.
-For a pinned caller, set `with.shared-ref` to the same ref as `uses`.
-Install the caller on the default branch so closed-PR events and scheduled sweeps can run.
-
-The close event covers both merged and unmerged same-repository PRs; fork close events are skipped because forks do not publish previews.
-Every run checks current PR state through the API and scans all historical preview tracks and commits, including tracks no longer in `meta.yaml`.
-The daily schedule catches older closed PRs, missed events, and previews left by late builds.
-Manual runs default to dry-run mode; inspect their logs before disabling it to perform deletion.
-No organization-wide token or additional secret is needed.
-
-The caller repository's `GITHUB_TOKEN` needs admin access to its `-pr` package to delete versions, in addition to the workflow's `packages: write` permission.
-Packages created by that repository's workflow normally grant this automatically; check the package's Manage Actions access settings for existing packages.
-Production publishing access alone does not establish access to the separate preview package.
-GitHub can report inaccessible packages as not found. Cleanup logs and skips missing or inaccessible packages, so verify package access if previews remain.
-
-Cleanup is limited to `ghcr.io/<caller repository>-pr`, even when production uses an overridden image name.
-It deletes entire package versions, including their tags:
-
-- All tags on a tagged version must identify closed PRs. Open-PR images and versions with unknown tags are retained.
-- Eligible image roots are processed oldest first using their creation timestamp (with a version-ID tie-breaker). If no tagged version would otherwise remain, the newest eligible tagged image and its complete manifest graph are retained because GHCR rejects deletion of the last tagged version. Once a newer preview exists, a subsequent sweep can remove the older retained image. This does not delete or recreate the package, so its visibility and access settings remain intact.
-- The registry's manifest graph identifies associated platform images and provenance/SBOM attestations. Descendants still referenced by retained images are preserved.
-- New preview indexes carry repository and PR annotations, allowing cleanup to recognize untagged indexes left by reruns. Cleanup retains older untagged images when PR ownership cannot be proven; timestamps alone do not establish ownership.
-- Discovery and PR-state checks must succeed before deletion. Cleanup rechecks closed PRs and the package snapshot before deleting; changed state aborts the run for a later retry.
-- Children are deleted before their index so a partial failure leaves its ownership discoverable on a retry. Registry-managed blobs are not deleted individually.
-
-The close-event cleanup shares the PR build's concurrency group, so it waits for that PR's active build.
-Scheduled sweeps can overlap other PR builds; the snapshot check detects changes during discovery, and a later sweep catches previews published after a cleanup run.
-Production packages, Git tags, GitHub releases, and the preview package itself are never deleted.
-The run fails if GitHub blocks deletion, for example when a public version exceeds GitHub's download threshold. Cleanup does not bypass these restrictions.
-
-Cleanup uses ordinary `pull_request: closed` events, not `pull_request_target`; no opt-out from GitHub's public-repository event policy is needed.
-The caller and shared job both skip fork close events, keeping fork tokens read-only.
-The workflow checks out trusted shared tooling, never caller or PR sources, and never builds or executes PR code.
-Do not pass an untrusted PR ref as `shared-ref`.
-The shared workflow also temporarily accepts existing same-repository `pull_request_target: closed` callers, allowing the shared change to be published before callers migrate. Replace that trigger with the example above to avoid GitHub's November 2, 2026 policy restriction.
+Existing `-pr` packages are not migrated or deleted automatically. Historical PR
+comments still point to those packages; new successful builds update the comments
+to the shared package. Existing preview artifacts remain available unless retired
+separately. Rerun all jobs in open PR workflows after the rollout to use the new
+shared workflow and tooling.
 
 ### Required root metadata and release tracks
 
@@ -483,6 +431,7 @@ The following rules apply to all tracks:
   Versions ending in `-rN` are reserved for image revisions.
 - Revisions are allocated per exact image version, including prerelease identifiers, using both Git tags and releases/drafts.
   They do not reset when a track is renamed or a version is reassigned to another track.
+- The `pr-` tag prefix is reserved for PR previews and is rejected in production tags.
 - Promotion requires a reviewed configuration change; build order does not promote tracks.
   Removing a track stops its builds but does not delete historical tags or remove its old moving aliases from GHCR.
   Retire obsolete aliases explicitly; retaining one must not be interpreted as a promise of maintenance.
@@ -564,7 +513,8 @@ When migrating existing protection, publish the shared workflow first, rerun all
 then apply the OpenTofu configuration to replace the old per-track requirements.
 Rerunning only failed jobs can reuse the old shared-workflow commit.
 Package discovery for one architecture is not proof of availability for another; rerun failed checks after delayed upstream publication.
-PRs never publish production images or move production aliases.
+PRs publish only `pr-` preview tags in the shared package, never production tags
+or aliases.
 
 Packaging changelogs are scoped to the previous release of the same track; pre-existing stable releases without a track marker remain compatible.
 
@@ -670,7 +620,6 @@ actionlint
 ```
 
 The release CLI lives in `cmd/container-release`.
-The preview cleanup CLI lives in `cmd/container-pr-cleanup`; use `-dry-run` with `GITHUB_REPOSITORY` and `GH_TOKEN` set to inspect candidates without deleting anything.
 It is written in Go and uses `go.yaml.in/yaml/v3` for strict YAML parsing.
 The workflow compiles it using the Go toolchain provided by the Ubuntu runner; Go 1.23 or newer is required.
 Build it with `go build -o /path/to/container-release ./cmd/container-release`.

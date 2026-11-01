@@ -225,6 +225,20 @@ class MacroTests(unittest.TestCase):
         self.assertIn("<code>latest</code>", preview)
         self.assertNotIn("<code>manual</code>", text)
 
+    def test_pr_tags_are_never_shown_as_release_aliases(self) -> None:
+        """Hide PR tags even when fixtures point them at a production digest."""
+        item = copy.deepcopy(IMAGE)
+        for release in item["releases"]:
+            item["tags"]["pr-12-" + release["track"]] = release["digest"]
+            item["tags"]["pr-12-" + release["track"] + "-" + "a" * 40] = release[
+                "digest"
+            ]
+        text = render_versions(item)
+        self.assertNotIn("pr-12-", text)
+        self.assertIn('data-container-tag="latest"', text)
+        self.assertIn('data-container-tag="2.0.0-rc.1-r0"', text)
+        self.assertIn("### Preview", text)
+
     def test_all_verified_revisions_are_listed_newest_first(self) -> None:
         """Order every verified revision by publication time."""
         item = copy.deepcopy(IMAGE)
@@ -1006,8 +1020,8 @@ class SourceTests(unittest.TestCase):
     @patch("macros.main.collect_releases", return_value=(IMAGE["releases"], []))
     @patch("macros.main.request")
     def test_empty_registry_tags(self, request: Mock, releases: Mock) -> None:
-        """Treat null and empty registry tag lists as an empty published table."""
-        for tags in (None, []):
+        """Treat empty or PR-only tag lists as an empty published table."""
+        for tags in (None, [], ["pr-12-stable", "pr-12-stable-" + "a" * 40]):
             with self.subTest(tags=tags):
                 request.reset_mock()
                 request.side_effect = [
@@ -1019,7 +1033,7 @@ class SourceTests(unittest.TestCase):
                 self.assertIsNone(item["pulls"])
                 self.assertIn("No releases available yet", render_versions(item))
                 self.assertEqual(request.call_count, 2)
-        self.assertEqual(releases.call_count, 2)
+        self.assertEqual(releases.call_count, 3)
 
     @patch("macros.main.collect_releases", return_value=(IMAGE["releases"], []))
     @patch("macros.main.collect_tags", side_effect=RuntimeError("HTTP 403"))
@@ -1093,11 +1107,11 @@ class SourceTests(unittest.TestCase):
             (record, {}),
             ({"token": "registry-secret"}, {}),
             (
-                {"tags": ["latest"]},
+                {"tags": ["pr-12-stable", "latest"]},
                 {"Link": '</v2/tuxcrate/zrepl/tags/list?last=latest>; rel="next"'},
             ),
             (None, {"Docker-Content-Digest": record["digest"]}),
-            ({"tags": ["1.2.3-r1"]}, {}),
+            ({"tags": ["pr-12-stable-" + "a" * 40, "1.2.3-r1"]}, {}),
             (None, {"Docker-Content-Digest": record["digest"]}),
             ('<span>Total downloads</span><h3 title="12345">12.3k</h3>', {}),
         ]
@@ -1117,6 +1131,7 @@ class SourceTests(unittest.TestCase):
             calls[4].kwargs["headers"]["Authorization"], "Bearer registry-secret"
         )
         self.assertEqual(calls[5].kwargs["method"], "HEAD")
+        self.assertFalse(any("/manifests/pr-" in call.args[0] for call in calls))
         self.assertNotIn("Authorization", calls[-1].kwargs["headers"])
 
     @patch("macros.main.request")

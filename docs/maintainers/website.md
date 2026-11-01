@@ -58,6 +58,8 @@ exact heading title because the display text may be abbreviated.
 The next build refreshes the count; no browser-side requests or third-party
 badge services are needed. Unpublished packages have no counter, since a zero
 would be misleading. Offline previews use fictional counts.
+The total includes PR-preview downloads because previews share the production
+package. It is not a production-only usage count.
 Keep `container.description` to two or three sentences explaining what the tool does.
 Put configuration details and prerequisites in the corresponding Markdown blocks.
 All three content blocks are optional; use them to keep longer documentation in Markdown.
@@ -126,6 +128,9 @@ You do not need a separate generator, Go toolchain, Python requirements file, or
 - GHCR's tag list and current manifest digests verify that each displayed revision tag still matches its release metadata.
   The plugin fetches all pages of both APIs; missing or mismatched revision tags are excluded.
   Tags without matching metadata are not displayed; the plugin does not infer versions from tag names.
+  PR-preview tags beginning with `pr-` are skipped before manifest lookups and
+  excluded from displayed aliases even when they match a production digest.
+  Published prerelease tracks such as `develop` and `preview` remain visible.
 - Repositories without published `release.json` metadata show "No releases available yet".
   They do not query GHCR, which may not have a package before the first release.
   An empty registry tag list also shows this message. API errors still stop the build.
