@@ -769,14 +769,35 @@ class ContainerTemplateTests(unittest.TestCase):
                 )
                 self.assertNotIn("| Image Tags | Track |", text)
                 self.assertNotIn("No image has been published yet", text)
-                if name == "zrepl":
-                    self.assertIn("--privileged", metadata["container"]["docker_run"])
-                    privileged = metadata["container"]["compose"]["services"]["zrepl"][
-                        "privileged"
-                    ]
-                    self.assertIs(privileged, True)  # noqa: FBT003 -- Verify the boolean type too.
-                    self.assertIn("--privileged", text)
-                    self.assertIn("privileged: true", text)
+
+    def test_zrepl_non_root_setup(self) -> None:
+        """Document delegated ZFS access without a privileged container."""
+        root = Path(__file__).resolve().parents[2]
+        source = (root / "docs/containers/zrepl.md").read_text()
+        _, front_matter, body = source.split("---", 2)
+        metadata = yaml.safe_load(front_matter)
+        env = template_environment()
+        env.globals["gh_image_versions_data"] = Mock(
+            return_value={
+                "image": "ghcr.io/tuxcrate/zrepl",
+                "releases": [],
+                "preview": False,
+            }
+        )
+        text = env.from_string(body).render(page={"meta": metadata})
+        cli = metadata["container"]["docker_run"]
+        service = metadata["container"]["compose"]["services"]["zrepl"]
+        self.assertNotIn("--privileged", cli)
+        self.assertNotIn("privileged", service)
+        self.assertIn("--device /dev/zfs:/dev/zfs", cli)
+        self.assertIn("--cap-drop ALL", cli)
+        self.assertIn("--security-opt no-new-privileges=true", cli)
+        self.assertEqual(service["devices"], ["/dev/zfs:/dev/zfs"])
+        self.assertEqual(service["cap_drop"], ["ALL"])
+        self.assertEqual(service["security_opt"], ["no-new-privileges:true"])
+        self.assertIn("UID/GID `1000:1000`", text)
+        self.assertIn("sudo zfs allow -u 1000", text)
+        self.assertIn("Full rootless-engine support has not been verified", text)
 
     def test_pull_counter_zero_and_unavailable(self) -> None:
         """Show a genuine zero but omit unavailable counts instead of inventing one."""
