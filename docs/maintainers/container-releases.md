@@ -27,28 +27,97 @@ jobs:
       packages: write
       pull-requests: write
     uses: tuxcrate/github-actions/.github/workflows/container.yml@main
+    secrets: inherit
 ```
 
-Every caller repository must contain `meta.yaml` in its root, even for single-track images.
-The workflow checks for this file before building the release tooling.
-It then validates the tracks and aliases before building or publishing any images.
+Every caller repository must contain `meta.yaml` in its root, including single-track images.
+The workflow checks for this file before building the release tooling, then validates the tracks and aliases before building or publishing any images.
 There is no configurable metadata path or workflow-version fallback.
 
 The `Containerfile` receives each track's exact version pin as `APP_VERSION`.
-It must pin the application to that version and run its own build-time smoke tests.
+It must install that exact version. Keep useful installation assertions in the
+Containerfile and put startup and shutdown tests in a host-side
+[`tests/smoke.sh` hook](container-tests.md), without copying it into the image.
 Keep the version or full APT package pin in `meta.yaml` and update it through a reviewed PR.
+
+The workflow also supplies `PACKAGE_VERSION` for packaging identity, independently
+of the upstream installation pin. Production builds receive the immutable image
+tag, such as `4.0.20.3014-r1` or `5.0.0.2870-prerelease-r1`. PR builds receive
+`<imageVersion>-pr-<number>-<track>-<short-merge-commit-sha>` and never reserve a
+production revision. Containerfiles can use `ARG PACKAGE_VERSION` to embed this
+identity; Sonarr, Radarr, and Prowlarr expose it in System → Status alongside a
+Tuxcrate link. Their local builds fall back to `<APP_VERSION>-local` when the
+argument is omitted. Never use `PACKAGE_VERSION` to select upstream downloads.
+
+### Image labels and annotations
+
+The shared workflow explicitly sets these three labels on every platform image,
+for both production and PR builds:
+
+| Label | Production value | PR value |
+| --- | --- | --- |
+| `org.opencontainers.image.source` | Caller repository URL, such as `https://github.com/tuxcrate/sonarr` | Same caller repository URL, not the separate preview package URL |
+| `org.opencontainers.image.version` | Full immutable image tag, including `-rN` | Full preview package version |
+| `org.opencontainers.image.revision` | Source Git commit SHA | Tested merge commit SHA |
+
+The OCI revision label remains the source-control revision; the version label
+includes the image rebuild counter. Labels are set for every track, even when
+the Containerfile does not consume `PACKAGE_VERSION`.
+
+For example, a production Sonarr image might have version `4.0.20.3014-r1`,
+while PR 12's stable track might have version
+`4.0.20.3014-pr-12-stable-abcdef0`. The revision label contains the full Git SHA
+in either case, never `r1`. The source label points to the packaging repository,
+not the upstream Sonarr repository or `tuxcrate.com`.
+
+These are image-configuration labels, available under `Config.Labels` in
+`docker image inspect`. They are not automatically annotations on the
+multiarchitecture OCI index. After pulling an image, inspect its labels with:
+
+{% raw %}
+```sh
+docker pull ghcr.io/tuxcrate/sonarr:latest
+docker image inspect --format '{{json .Config.Labels}}' ghcr.io/tuxcrate/sonarr:latest
+```
+{% endraw %}
+
+PR builds additionally set these **OCI index annotations**, including for fork
+PRs whose images remain local:
+
+| Annotation | Value | Purpose |
+| --- | --- | --- |
+| `io.tuxcrate.repository` | Caller repository, such as `tuxcrate/sonarr` | Identifies the repository that owns the preview |
+| `io.tuxcrate.pull-request` | PR number as a string, such as `12` | Identifies the PR that owns the preview |
+
+Preview cleanup uses these annotations to recognize untagged indexes left by
+reruns. They are not container labels and do not appear in `Config.Labels`.
+Production indexes do not receive these preview annotations. For a published
+preview, inspect the raw index with:
+
+```sh
+docker buildx imagetools inspect --raw ghcr.io/tuxcrate/sonarr-pr:pr-12-stable
+```
+
+The keys appear in the index's `annotations` mapping. The `index:` prefix in
+the workflow selects where Buildx writes them; it is not part of either key.
+
+Other labels may be inherited from the base image or set by a repository's
+Containerfile. The shared workflow does not explicitly set other predefined
+OCI keys such as `created`, `authors`, `url`, `documentation`, `vendor`, or
+`licenses`; do not assume those values are present. Provenance and SBOMs are
+separate attestations, not additional image labels. The predefined label meanings
+are described in the [OCI annotations specification](https://github.com/opencontainers/image-spec/blob/main/annotations.md).
 
 ### Shared tooling and integration inputs
 
-Image build settings come only from `meta.yaml`.
-Workflow inputs cannot set them.
+Set image build settings in `meta.yaml`; workflow inputs cannot set them.
 All repositories use the same defaults: `ghcr.io/<caller repository>`, context `.`, root `Containerfile`, and `linux/amd64,linux/arm64`.
 Metadata can override these for individual tracks; the caller workflow stays the same.
 
 | Input | Default | Purpose |
 | --- | --- | --- |
 | `shared-ref` | `main` | Shared tooling ref; must match the workflow's `uses` ref |
-| `docs-repository` | Empty | Optional `owner/repo` to notify with an `image-published` repository dispatch |
+| `docs-repository` | `tuxcrate/docs` | `owner/repo` to notify with an `image-published` repository dispatch; set to `''` to disable |
 
 For a pinned integration, use the same commit SHA in the workflow's `uses` and `shared-ref`.
 Both repositories must be accessible to the caller.
@@ -77,11 +146,13 @@ For local authenticated builds, add
 
 ### Behavior and tags
 
-- PRs build both platforms using QEMU.
-  Same-repository PRs publish test images to a separate `ghcr.io/<caller repository>-pr` package; fork PRs remain build-only, with no registry login.
+- PRs build both platforms using QEMU, export a local OCI archive, and test each platform before any registry upload.
+  Same-repository PRs then publish test images to a separate `ghcr.io/<caller repository>-pr` package; fork PRs build and test locally, with no registry login or upload.
   PRs never create GitHub releases or update production aliases.
   The Containerfile's `RUN` assertions execute on both architectures; no host ZFS kernel module is needed for zrepl's smoke tests.
-- Default-branch pushes, schedules, and manual runs rebuild without layer cache, pull the configured base image reference, and publish to GHCR using `GITHUB_TOKEN`.
+- Default-branch pushes build and publish only tracks whose build or publication inputs differ from their last successfully published release.
+  Scheduled and manual runs always rebuild every active track, even when its source is unchanged.
+  Builds run without layer cache, pull the configured base image reference, and publish to GHCR using `GITHUB_TOKEN`.
   A digest-pinned base stays fixed until a source update (such as a Renovate digest-update PR) is merged.
 - Outside PR previews, other branches and other event types cannot publish.
   Do not add `pull_request_target` as a publishing trigger.
@@ -92,24 +163,44 @@ For local authenticated builds, add
   For example, tags `["${version}", "${major}.${minor}", latest]` publish `0.7.0`, `0.7`, and `latest` for `0.7.0`.
   Prereleases may use named aliases such as `preview`, never stable aliases.
   Multiple current releases can share the same default branch through tracks.
-- The image is first uploaded by digest, with BuildKit provenance and an SBOM, so failed builds never publish named release tags.
-- A draft GitHub release reserves the next revision before tagging the image.
-  Successful publication publishes the release, creating `v0.7.0-rN` at the exact source commit.
+- Each track is built and tested before publication. BuildKit exports an OCI archive,
+  including provenance and SBOMs, without pushing it. The shared runner loads each
+  platform from that archive and invokes the optional repository-root
+  `tests/smoke.sh` hook, then validates final-image OS metadata locally.
+  Only after those checks pass does the workflow log in and upload the unchanged
+  archive by digest. Failed builds or tests upload no image manifests or layers
+  to GHCR and do not move preview or production tags. The GitHub Actions build
+  cache is separate from image publication.
+- A draft GitHub release reserves the next revision **before building** the image,
+  allowing the exact revision to be embedded during the build. Its initial body
+  identifies the source commit and track and states that publication is pending.
+  Reservation also returns the numeric GitHub release ID. Finalization retrieves
+  the draft by this ID, since GitHub's get-by-tag endpoint excludes draft releases.
+  After tests and upload, `container-release finalize` verifies the draft still
+  belongs to this commit and track, rechecks revision-tag availability, and fills
+  its notes with the tested digest and final-image OS metadata. It does not
+  allocate another revision or publish the draft.
+  On success, the workflow publishes the release and creates `v0.7.0-rN` at the exact source commit.
   GitHub release notes contain the digest, platforms, and linked packaging commits since the previous published image release.
 - The release CLI lists all new commit subjects with commit links, oldest first, using `git log`.
   Conventional Commits are not required.
-  The first release includes all history; rebuilds without new commits are identified explicitly.
+  The first release includes all history; release notes identify rebuilds that have no new commits.
 - All releases are serialized across trigger types.
   Revision selection includes both Git tags and all GitHub releases, including drafts and paginated history.
-- Stale default-branch runs fail before reserving a revision, preventing aliases from moving backwards.
+- Stale default-branch runs fail before reserving a revision and are checked again
+  before finalizing the draft, preventing aliases from moving backwards.
   Start a fresh run on the current branch HEAD.
 - Each release includes a versioned `release.json` asset with the image, track, application version, revision, digest, source commit, platforms, and historical aliases.
   It also includes `os_flavor` (such as `alpine` or `debian`) and `os_version`, read from the final image by digest on the first declared platform, not inferred from the base image tag.
   These use `ID` and `VERSION_ID` from `/etc/os-release` (falling back to `/usr/lib/os-release`); Debian uses `/etc/debian_version` when available to include the point release, such as `13.7`.
-  The image's entrypoint is not run. Missing or invalid OS identifiers fail metadata generation rather than publishing guessed values.
+  Metadata generation does not run the image's entrypoint and fails if OS identifiers are missing or invalid.
   PR builds generate a temporary, synthetic `release.json` using the same metadata generation and validation as real releases, including for fork PRs that cannot publish images.
+  They also rehearse revision reservation and draft finalization against the
+  tested local image. A fake GitHub API models draft lookup by release ID and
+  rejects draft lookup by tag, so that failure is caught before merge. The
+  rehearsal never creates or edits real releases or contacts the registry.
   Validation checks all required fields, including OS metadata from a locally loaded image of the first declared platform. Empty or invalid required values fail the job.
-  This fixture uses revision `r0` and the local image ID as its digest. It stays in the runner's temporary directory and does not reserve a revision, create a GitHub release, or publish release tags.
+  This fixture uses placeholder revision `r0` and the real tested OCI archive digest. It stays in the runner's temporary directory and does not reserve a revision, create a GitHub release, or publish release tags.
   The GitHub release's `published_at` is the authoritative publication timestamp.
   Draft assets are not published versions.
 - Prerelease versions create GitHub prereleases and never become GitHub's latest release.
@@ -117,7 +208,9 @@ For local authenticated builds, add
   Such tracks must suffix their image version, for example with `"${version}-prerelease"`; neither the bare numeric version nor its unsuffixed revision is published automatically.
   In track mode only the owner of `latest` can become the latest release.
 
-If publication fails, it may leave an untagged image and a draft release.
+If a production build or test fails after reservation, its draft remains and the
+revision is consumed. Published revision numbers can therefore have gaps.
+If publication fails, it may also leave an untagged image and a draft release.
 Keep the draft as a revision reservation and rerun the workflow, which allocates a new revision.
 Do not delete release history or repurpose revision tags.
 The workflow checks the registry before tagging.
@@ -146,11 +239,11 @@ The preview package always derives from the caller repository, regardless of any
 docker pull ghcr.io/tuxcrate/zrepl-pr:pr-12-stable
 ```
 
-Preview builds retain uncached multiarch smoke tests, provenance, and SBOMs, but do not allocate release revisions, publish GitHub releases, move production aliases, or notify the website.
+Preview builds include uncached multiarch smoke tests, provenance, and SBOMs. They do not allocate release revisions, publish GitHub releases, move production aliases, or notify the website.
 The shared cleanup workflow removes closed-PR previews when installed as described below.
 
 After a successful push, the workflow posts pull commands, the tested merge commit, platforms, image digest, and a build link in the PR.
-The same comment includes the generated `release.json` in a collapsed section labeled as synthetic validation metadata, with a note that its revision and digest are placeholders.
+The same comment includes the generated `release.json` in a collapsed section labeled as synthetic validation metadata. Its revision is a placeholder; its digest identifies the tested multiarchitecture artifact.
 Subsequent builds update the same bot-authored comment for each track.
 Fork PRs do not receive image comments because they do not publish images.
 
@@ -211,31 +304,31 @@ The daily schedule catches older closed PRs, missed events, and previews left by
 Manual runs default to dry-run mode; inspect their logs before disabling it to perform deletion.
 No organization-wide token or additional secret is needed.
 
-The caller repository's `GITHUB_TOKEN` needs **admin access to its `-pr` package** to delete versions, in addition to the workflow's `packages: write` permission.
-Packages created by that repository's workflow normally grant this automatically; check the package's **Manage Actions access** settings for existing packages.
+The caller repository's `GITHUB_TOKEN` needs admin access to its `-pr` package to delete versions, in addition to the workflow's `packages: write` permission.
+Packages created by that repository's workflow normally grant this automatically; check the package's Manage Actions access settings for existing packages.
 Production publishing access alone does not establish access to the separate preview package.
-GitHub can report inaccessible packages as not found; a missing/inaccessible package is logged and skipped, so verify package access if previews remain.
+GitHub can report inaccessible packages as not found. Cleanup logs and skips missing or inaccessible packages, so verify package access if previews remain.
 
 Cleanup is limited to `ghcr.io/<caller repository>-pr`, even when production uses an overridden image name.
-It deletes entire package versions, not merely tag names:
+It deletes entire package versions, including their tags:
 
 - All tags on a tagged version must identify closed PRs. Open-PR images and versions with unknown tags are retained.
 - Eligible image roots are processed oldest first using their creation timestamp (with a version-ID tie-breaker). If no tagged version would otherwise remain, the newest eligible tagged image and its complete manifest graph are retained because GHCR rejects deletion of the last tagged version. Once a newer preview exists, a subsequent sweep can remove the older retained image. This does not delete or recreate the package, so its visibility and access settings remain intact.
 - The registry's manifest graph identifies associated platform images and provenance/SBOM attestations. Descendants still referenced by retained images are preserved.
-- New preview indexes carry repository and PR annotations, allowing cleanup to recognize untagged indexes left by reruns. Older untagged images without provable PR ownership are retained rather than guessed from timestamps.
+- New preview indexes carry repository and PR annotations, allowing cleanup to recognize untagged indexes left by reruns. Cleanup retains older untagged images when PR ownership cannot be proven; timestamps alone do not establish ownership.
 - Discovery and PR-state checks must succeed before deletion. Cleanup rechecks closed PRs and the package snapshot before deleting; changed state aborts the run for a later retry.
 - Children are deleted before their index so a partial failure leaves its ownership discoverable on a retry. Registry-managed blobs are not deleted individually.
 
 The close-event cleanup shares the PR build's concurrency group, so it waits for that PR's active build.
 Scheduled sweeps can overlap other PR builds; the snapshot check detects changes during discovery, and a later sweep catches previews published after a cleanup run.
 Production packages, Git tags, GitHub releases, and the preview package itself are never deleted.
-GitHub package deletion restrictions, such as public versions exceeding GitHub's download threshold, fail the run rather than bypassing protection.
+The run fails if GitHub blocks deletion, for example when a public version exceeds GitHub's download threshold. Cleanup does not bypass these restrictions.
 
 Cleanup uses ordinary `pull_request: closed` events, not `pull_request_target`; no opt-out from GitHub's public-repository event policy is needed.
 The caller and shared job both skip fork close events, keeping fork tokens read-only.
 The workflow checks out trusted shared tooling, never caller or PR sources, and never builds or executes PR code.
 Do not pass an untrusted PR ref as `shared-ref`.
-The shared workflow temporarily also accepts existing same-repository `pull_request_target: closed` callers so the shared change can be published before migrating callers; replace that trigger with the example above to avoid GitHub's November 2, 2026 policy restriction.
+The shared workflow also temporarily accepts existing same-repository `pull_request_target: closed` callers, allowing the shared change to be published before callers migrate. Replace that trigger with the example above to avoid GitHub's November 2, 2026 policy restriction.
 
 ### Required root metadata and release tracks
 
@@ -284,7 +377,6 @@ Tracks with a prerelease suffix but no explicit `prerelease: true` are not filte
 Skipped tracks are still validated, including tag ownership; equal versions remain subject to the existing ownership checks.
 Existing images, tags, and releases are left unchanged.
 
-The APT and PyPI datasource restrictions below remain unchanged.
 Supported datasources are:
 
 - `deb`: Debian package `depName`, HTTP(S) `registryUrl` with `suite`, `components`, and `binaryArch` query parameters, and full stable `X.Y.Z-N` package `version`.
@@ -299,7 +391,8 @@ Supported datasources are:
 When using `upstream`, omit the track-level `version`.
 All datasources inject the exact package or application pin as `APP_VERSION`.
 Without `upstream`, the track's `version` is used unchanged.
-Containerfiles use `ARG APP_VERSION` to receive the pin; there is no separate package-version build argument.
+Containerfiles use `ARG APP_VERSION` to receive the pin; `ARG PACKAGE_VERSION`
+receives the packaging identity, not another upstream version pin.
 For example:
 
 ```yaml
@@ -320,7 +413,9 @@ The Containerfile configures the package source and installs the pinned version.
 `baseImage` belongs to each track; a top-level `baseImage` is rejected.
 The YAML decoder also rejects unknown fields, duplicate keys, and multiple documents.
 Omitted build settings use the standard defaults above.
-Additional build arguments are declared only in each track's `buildArgs`; `APP_VERSION` and `BASE_IMAGE` are reserved and cannot be overridden there.
+Additional build arguments are declared only in each track's `buildArgs`;
+`APP_VERSION`, `BASE_IMAGE`, and `PACKAGE_VERSION` are reserved and cannot be
+overridden there.
 `APP_VERSION` is always supplied by the release planner in the workflow's build arguments.
 The `${version}` placeholder uses the application version without the Debian package revision.
 `APP_VERSION` remains the exact installation pin and never receives a synthetic image suffix.
@@ -367,7 +462,7 @@ Deploy website schema support before publishing schema version 2 releases, and c
 Old registry tags remain until explicitly retired; adding suffixed tags alone does not hide historical unsuffixed prerelease tags from Renovate.
 If existing images are retagged into the new revision namespace, also reserve those revisions with matching Git tags at their original source commits so future releases cannot reuse them.
 
-Rules:
+The following rules apply to all tracks:
 
 - All tracks live on the default branch.
   PRs validate the complete configuration and build every track, publishing previews only when eligible.
@@ -394,6 +489,71 @@ Rules:
 - Keep alias ownership consistent across configuration changes.
   Do not repurpose a former exact-version alias for another application version.
   Use only one publishing caller/configuration per image repository.
+
+### Skipping unchanged releases
+
+Before a default-branch push builds production images, the shared workflow runs
+`container-release release-plan`. It compares each active track with its newest
+published GitHub release, using the release's Git tag to read historical files.
+Drafts do not count as successful publication. A failed release therefore leaves
+its source changes eligible for the next push, including a subsequent docs-only
+commit. No new release assets or historical metadata changes are needed.
+
+The comparison includes:
+
+- Effective per-track build and publication settings: application and image
+  versions, base-image pin, build arguments, paths, platforms, destination image,
+  tags, and prerelease status.
+- Git-tracked files in the build context, including file names, contents, symlink
+  targets, additions, deletions, and executable modes. Docker ignore patterns and
+  negations apply; a Containerfile-specific `.dockerignore` takes precedence over
+  the context's `.dockerignore`.
+- The Containerfile and active ignore file, even if excluded by ignore patterns
+  or located outside the context, plus repository-root `tests/` files used for
+  host-side smoke testing.
+
+There is no implicit exclusion for README files or metadata: a Containerfile may
+use `COPY .`. Image repositories should explicitly keep non-build files out of
+their context, for example with this root `.dockerignore`:
+
+```text
+.git
+.github
+README.md
+LICENSE
+renovate.json
+meta.yaml
+tests
+```
+
+Excluding `meta.yaml` from the context lets the comparison use each track's
+effective settings instead of treating every metadata edit as a change to every
+track. Do not exclude files that the Containerfile needs to copy. Smoke tests
+remain release inputs despite the `tests` exclusion because they run on the host.
+Without an applicable exclusion, a tracked context file conservatively triggers
+a rebuild even if the Containerfile does not currently copy it.
+
+The planner records each track's build/skip decision in the workflow summary.
+When every track is unchanged, it skips the production build matrix entirely:
+no registry upload, revision reservation, tag movement, release, or website
+notification occurs. PRs still build and test every active track as before.
+New tracks, missing historical files, older unsupported metadata formats, and
+layouts that cannot be compared safely (such as symlinked Containerfiles or
+ignore files) cause a rebuild rather than a skip. Release-history API failures
+fail planning instead of silently treating a lookup error as unchanged inputs.
+
+This detects source-input changes, not identical runtime contents. Image digests
+are unsuitable for this check because revision labels, timestamps, and
+attestations can change without meaningful application changes. Dependencies
+downloaded during a build can also change without a packaging commit. Scheduled
+and manual runs deliberately bypass the comparison to refresh these dependencies
+and to repair publication failures or aliases. Shared-tooling updates alone do
+not trigger a caller push; use a manual or scheduled run to apply them.
+
+Publish the shared workflow and tooling before rolling out caller ignore files.
+Adding an ignore file is itself a build-input change and produces a release.
+
+### Required PR validation
 
 PR builds are uncached on every configured platform so an earlier build cannot hide a missing APT package.
 Require `container / pull-request-check` in GitHub branch protection/rulesets, not individual matrix-track checks.
@@ -451,30 +611,41 @@ Publish the preset and shared tooling before migrating caller repositories.
 ### Website integration
 
 The website can read `release.json` assets from public GitHub releases and resolve all current tags directly against GHCR.
-Historical alias lists record assignments at publication time.
-They do not show current assignments.
-Releases created before this metadata was added remain valid; the website lists them without adding data it does not have.
+Historical alias lists record assignments at publication time, which may differ from current assignments.
+Releases created before this metadata was added remain valid; the website lists them with only the data available.
 
-For immediate refreshes, optionally add this to the caller job:
+For immediate refreshes, forward the organization's `DOCS_TOKEN` secret in the caller job.
+The shared workflow defaults to notifying `tuxcrate/docs`, and `shared-ref` already defaults to `main`:
 
 {% raw %}
 ```yaml
-with:
-  docs-repository: tuxcrate/docs
-secrets:
-  docs-token: ${{ secrets.DOCS_TOKEN }}
+uses: tuxcrate/github-actions/.github/workflows/container.yml@main
+secrets: inherit
 ```
 {% endraw %}
 
 Use a GitHub App installation token or fine-grained token with contents: write on the docs repository only.
-The caller's `DOCS_TOKEN` repository secret is passed as `docs-token`.
+The organization secret must be available to each caller repository.
+`secrets: inherit` forwards all secrets available to the caller, not just `DOCS_TOKEN`.
+For narrower access, use an explicit mapping instead:
+
+{% raw %}
+```yaml
+secrets:
+  DOCS_TOKEN: ${{ secrets.DOCS_TOKEN }}
+```
+{% endraw %}
+
+The old explicit `docs-token` mapping remains supported for existing callers and takes precedence if both names are provided.
+Secrets stored only in the shared workflow repository are not available to callers.
 The caller's `GITHUB_TOKEN` cannot dispatch to a different repository.
 Never pass the website token into builds or PR jobs.
-One notification is sent after all release tracks finish successfully; PR builds and failed releases do not notify.
+The workflow sends one notification after all release tracks finish successfully; PR builds and failed releases do not notify.
 A missing token produces a warning.
 If the notification fails, the release still succeeds; the website refreshes on its hourly schedule.
-Configure `DOCS_TOKEN` as a repository secret, or an organization secret available to each caller.
-Without this optional token, the website still refreshes on its schedule or a manual run.
+You can also configure `DOCS_TOKEN` as a repository secret.
+Set `with.docs-repository: ''` to disable notifications, or override it to notify another repository.
+Manual runs can also refresh the website without this token.
 
 ### Setup
 
@@ -503,11 +674,19 @@ The preview cleanup CLI lives in `cmd/container-pr-cleanup`; use `-dry-run` with
 It is written in Go and uses `go.yaml.in/yaml/v3` for strict YAML parsing.
 The workflow compiles it using the Go toolchain provided by the Ubuntu runner; Go 1.23 or newer is required.
 Build it with `go build -o /path/to/container-release ./cmd/container-release`.
-Run the binary from the container source checkout with `plan`, `metadata`, `manifest`, or `reserve` and the required workflow environment variables set.
+Run the binary from the container source checkout with `plan`, `release-plan`,
+`metadata`, `manifest`, `reserve`, or `finalize` and the required workflow
+environment variables set.
+`release-plan` is read-only: on push events it needs full Git history, `GH_TOKEN`, and release-list access; it emits a filtered `matrix` and a `changed` boolean to `GITHUB_OUTPUT`.
 Publication commands receive `APP_VERSION` (the application version, without an APT package revision), `IMAGE_VERSION` (the expanded version tag), and `TAGS` (a JSON array of expanded moving tags) from the planner's build matrix.
 Only the Containerfile's build argument receives a full APT package pin.
 The `plan` command always reads `meta.yaml` from the current directory; it has no alternate path or environment fallback.
-The `reserve` command creates a real draft release; use `go test` for validation without publishing.
+The `reserve` command creates a real draft release before building and does not
+require `IMAGE_DIGEST`. Its outputs include `release-id`, `tag`, `tags`, `package-version`,
+and `latest`. After upload, `finalize` takes
+`RELEASE_ID`, `RELEASE_TAG`, `IMAGE_DIGEST`, and `PLATFORMS` alongside the publication inputs
+to fill that draft's release notes. Both commands modify GitHub releases;
+use `go test` for validation without publishing.
 
 Changelog integration tests use Git directly.
 CI runs all tests on every PR and default-branch push.
