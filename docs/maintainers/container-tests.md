@@ -19,7 +19,8 @@ a preview package version without creating releases or consuming revisions.
 2. Load each requested platform from the archive into the local Docker daemon
    using Skopeo. Verify the archive contains exactly one matching platform image
    and that the loaded image has the expected OS and architecture.
-3. Run `tests/smoke.sh` once for each platform, when the hook exists. QEMU enables
+3. Check the default runtime user, then run `tests/smoke.sh` once for each platform,
+   when the hook exists. QEMU enables
    execution of non-native platforms on the GitHub runner. A failing hook fails
    the track; there is no automatic retry of the entire test.
 4. Validate release metadata, including OS identification from the first tested
@@ -50,6 +51,36 @@ checks its checksum before uploading. Missing receipts or modified archives
 fail publication. These checks guard against accidental misuse; they cannot
 protect against malicious code already executing on the runner.
 
+## Shared runtime-user validation
+
+Before running a repository hook, `container-artifact test` checks every loaded
+platform image with its default user and no network, overriding only the
+entrypoint to `/bin/sh`. Images must provide `/bin/sh` and `id`. The default
+requirement is user and group `tuxcrate`, both with numeric ID 1000. The shared
+check verifies all four values: UID, GID, username, and group name. It also runs
+when the repository has no smoke hook.
+
+Applications that require root must document the reason and declare it in the
+Containerfile. For example:
+
+```dockerfile
+# ZFS administration requires root access to the host's ZFS devices.
+LABEL com.tuxcrate.runtime-user="root"
+```
+
+This policy requires UID/GID `0:0` and user/group names `root`; it does not skip
+validation. The optional label value `tuxcrate` declares the default explicitly.
+Other nonempty values fail validation. The label does not change the configured
+user or grant host privileges.
+
+The shared validator owns runtime identity assertions. Keep application startup,
+directory permissions, required tools, version/API checks, and shutdown behavior
+in repository hooks. Do not repeat the four identity assertions once shared
+validation is deployed, or start a service during an image build to test it.
+
+Shared test containers and repository hooks use `com.tuxcrate.smoke-test`.
+Cleanup recognizes only this label; there is no legacy-prefix fallback.
+
 ## Hook interface
 
 Create a regular file at the repository root's `tests/smoke.sh`, regardless
@@ -63,7 +94,7 @@ bash tests/smoke.sh IMAGE APP_VERSION PLATFORM
 | Argument | Meaning |
 | --- | --- |
 | `IMAGE` | Unique local Docker image reference loaded from the built archive; use it without pulling or rebuilding |
-| `APP_VERSION` | Exact installation pin from the track, including an APT package revision when applicable |
+| `APP_VERSION` | Expected upstream application version; for APT tracks, CI omits the Debian package revision |
 | `PLATFORM` | Requested platform, such as `linux/amd64` or `linux/arm64` |
 
 The hook also inherits `PACKAGE_VERSION` from the workflow. When an application
@@ -72,6 +103,10 @@ exposes packaging metadata, verify it matches this value, independently of
 author link that the application does not actually read. Sonarr, Radarr, and
 Prowlarr check their authenticated status APIs using the disposable instance's
 generated API key.
+
+The Containerfile still receives the full APT installation pin through its
+`APP_VERSION` build argument and must install and assert that exact package.
+Do not assume the similarly named hook argument includes the Debian revision.
 
 The status request retries up to four times with a ten-second socket timeout per
 request, allowing for slow first requests under QEMU. Once a request succeeds,
@@ -84,13 +119,13 @@ of hard-coding a release. Helpers and fixtures may live elsewhere under `tests/`
 the pipeline does not automatically execute every file in that directory.
 
 The runner supplies `TUXCRATE_TEST_ID`. Label every test container with
-`io.tuxcrate.smoke-test=$TUXCRATE_TEST_ID` so the shared helper can remove it if
+`com.tuxcrate.smoke-test=$TUXCRATE_TEST_ID` so the shared helper can remove it if
 the hook times out or is interrupted. Each invocation has a five-minute timeout,
 followed by a 30-second termination grace period. Hooks should use shorter
 readiness and shutdown limits and their own cleanup traps.
 
-Repositories without a hook keep their existing Containerfile assertions and
-receive platform and OS-metadata validation, but no application-specific runtime
+Repositories without a hook keep their installation assertions and receive
+platform, runtime-user, and OS-metadata validation, but no application-specific runtime
 smoke test. Repositories can therefore migrate individually; CI prints a notice
 when the hook is missing.
 
@@ -99,7 +134,7 @@ when the hook is missing.
 Run the production entrypoint as the image's configured user. Do not override
 it to make startup pass. Check readiness through an application endpoint
 where available, check the installed version, and confirm graceful shutdown.
-Check runtime ownership, writable configuration directories, licenses, and
+Check application directory ownership, writable configuration directories, licenses, and
 required tools as appropriate for the application.
 
 Use disposable container writable layers or volumes for generated data. Do not
@@ -133,8 +168,8 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-container=$(docker create --pull=never --platform "$platform" \
-    --label "io.tuxcrate.smoke-test=${TUXCRATE_TEST_ID:-manual-$$}" "$image")
+container=$(docker create --pull=never --platform "$platform" --network none \
+    --label "com.tuxcrate.smoke-test=${TUXCRATE_TEST_ID:-manual-$$}" "$image")
 docker start "$container" >/dev/null
 
 # Add bounded, application-specific readiness and exact-version checks here.
@@ -207,6 +242,12 @@ is set; remove it with `docker image rm` when local validation is finished.
 Remove the archive and its `.tested` receipt when they are no longer needed.
 
 ## Migrating an image repository
+
+For the runtime-user policy, first migrate account names, explicit root
+declarations, and smoke-test labels in callers. Deploy the shared validator
+before removing duplicate identity checks from repository hooks. Keep these
+changes separate when necessary so existing validation remains available during
+the rollout.
 
 Publish the shared workflow and helper changes before migrating callers.
 For pinned workflows, keep `uses` and `with.shared-ref` on the same published
