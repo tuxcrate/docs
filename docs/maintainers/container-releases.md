@@ -40,6 +40,26 @@ Containerfile and put startup and shutdown tests in a host-side
 [`tests/smoke.sh` hook](container-tests.md), without copying it into the image.
 Keep the version or full APT package pin in `meta.yaml` and update it through a reviewed PR.
 
+The workflow also supplies `PACKAGE_VERSION` for packaging identity, independently
+of the upstream installation pin. Production builds receive the immutable image
+tag, such as `4.0.20.3014-r1` or `5.0.0.2870-prerelease-r1`. PR builds receive
+`<imageVersion>-pr-<number>-<track>-<short-merge-commit-sha>` and never reserve a
+production revision. Containerfiles can use `ARG PACKAGE_VERSION` to embed this
+identity; Sonarr, Radarr, and Prowlarr expose it in System → Status alongside a
+Tuxcrate link. Their local builds fall back to `<APP_VERSION>-local` when the
+argument is omitted. Never use `PACKAGE_VERSION` to select upstream downloads.
+
+All images built by the shared workflow carry these labels:
+
+| Label | Production value | PR value |
+| --- | --- | --- |
+| `org.opencontainers.image.version` | Full immutable image tag, including `-rN` | Full preview package version |
+| `org.opencontainers.image.revision` | Source Git commit SHA | Tested merge commit SHA |
+
+The OCI revision label remains the source-control revision; the version label
+includes the image rebuild counter. Labels are set for every track, even when
+the Containerfile does not consume `PACKAGE_VERSION`.
+
 ### Shared tooling and integration inputs
 
 Set image build settings in `meta.yaml`; workflow inputs cannot set them.
@@ -103,7 +123,13 @@ For local authenticated builds, add
   archive by digest. Failed builds or tests upload no image manifests or layers
   to GHCR and do not move preview or production tags. The GitHub Actions build
   cache is separate from image publication.
-- A draft GitHub release reserves the next revision before tagging the image.
+- A draft GitHub release reserves the next revision **before building** the image,
+  allowing the exact revision to be embedded during the build. Its initial body
+  identifies the source commit and track and states that publication is pending.
+  After tests and upload, `container-release finalize` verifies the draft still
+  belongs to this commit and track, rechecks revision-tag availability, and fills
+  its notes with the tested digest and final-image OS metadata. It does not
+  allocate another revision or publish the draft.
   On success, the workflow publishes the release and creates `v0.7.0-rN` at the exact source commit.
   GitHub release notes contain the digest, platforms, and linked packaging commits since the previous published image release.
 - The release CLI lists all new commit subjects with commit links, oldest first, using `git log`.
@@ -111,7 +137,8 @@ For local authenticated builds, add
   The first release includes all history; release notes identify rebuilds that have no new commits.
 - All releases are serialized across trigger types.
   Revision selection includes both Git tags and all GitHub releases, including drafts and paginated history.
-- Stale default-branch runs fail before reserving a revision, preventing aliases from moving backwards.
+- Stale default-branch runs fail before reserving a revision and are checked again
+  before finalizing the draft, preventing aliases from moving backwards.
   Start a fresh run on the current branch HEAD.
 - Each release includes a versioned `release.json` asset with the image, track, application version, revision, digest, source commit, platforms, and historical aliases.
   It also includes `os_flavor` (such as `alpine` or `debian`) and `os_version`, read from the final image by digest on the first declared platform, not inferred from the base image tag.
@@ -127,7 +154,9 @@ For local authenticated builds, add
   Such tracks must suffix their image version, for example with `"${version}-prerelease"`; neither the bare numeric version nor its unsuffixed revision is published automatically.
   In track mode only the owner of `latest` can become the latest release.
 
-If publication fails, it may leave an untagged image and a draft release.
+If a production build or test fails after reservation, its draft remains and the
+revision is consumed. Published revision numbers can therefore have gaps.
+If publication fails, it may also leave an untagged image and a draft release.
 Keep the draft as a revision reservation and rerun the workflow, which allocates a new revision.
 Do not delete release history or repurpose revision tags.
 The workflow checks the registry before tagging.
@@ -308,7 +337,8 @@ Supported datasources are:
 When using `upstream`, omit the track-level `version`.
 All datasources inject the exact package or application pin as `APP_VERSION`.
 Without `upstream`, the track's `version` is used unchanged.
-Containerfiles use `ARG APP_VERSION` to receive the pin; there is no separate package-version build argument.
+Containerfiles use `ARG APP_VERSION` to receive the pin; `ARG PACKAGE_VERSION`
+receives the packaging identity, not another upstream version pin.
 For example:
 
 ```yaml
@@ -329,7 +359,9 @@ The Containerfile configures the package source and installs the pinned version.
 `baseImage` belongs to each track; a top-level `baseImage` is rejected.
 The YAML decoder also rejects unknown fields, duplicate keys, and multiple documents.
 Omitted build settings use the standard defaults above.
-Additional build arguments are declared only in each track's `buildArgs`; `APP_VERSION` and `BASE_IMAGE` are reserved and cannot be overridden there.
+Additional build arguments are declared only in each track's `buildArgs`;
+`APP_VERSION`, `BASE_IMAGE`, and `PACKAGE_VERSION` are reserved and cannot be
+overridden there.
 `APP_VERSION` is always supplied by the release planner in the workflow's build arguments.
 The `${version}` placeholder uses the application version without the Debian package revision.
 `APP_VERSION` remains the exact installation pin and never receives a synthetic image suffix.
@@ -588,12 +620,19 @@ The preview cleanup CLI lives in `cmd/container-pr-cleanup`; use `-dry-run` with
 It is written in Go and uses `go.yaml.in/yaml/v3` for strict YAML parsing.
 The workflow compiles it using the Go toolchain provided by the Ubuntu runner; Go 1.23 or newer is required.
 Build it with `go build -o /path/to/container-release ./cmd/container-release`.
-Run the binary from the container source checkout with `plan`, `release-plan`, `metadata`, `manifest`, or `reserve` and the required workflow environment variables set.
+Run the binary from the container source checkout with `plan`, `release-plan`,
+`metadata`, `manifest`, `reserve`, or `finalize` and the required workflow
+environment variables set.
 `release-plan` is read-only: on push events it needs full Git history, `GH_TOKEN`, and release-list access; it emits a filtered `matrix` and a `changed` boolean to `GITHUB_OUTPUT`.
 Publication commands receive `APP_VERSION` (the application version, without an APT package revision), `IMAGE_VERSION` (the expanded version tag), and `TAGS` (a JSON array of expanded moving tags) from the planner's build matrix.
 Only the Containerfile's build argument receives a full APT package pin.
 The `plan` command always reads `meta.yaml` from the current directory; it has no alternate path or environment fallback.
-The `reserve` command creates a real draft release; use `go test` for validation without publishing.
+The `reserve` command creates a real draft release before building and does not
+require `IMAGE_DIGEST`. Its outputs include `tag`, `tags`, `package-version`,
+and `latest`. After upload, `finalize` takes
+`RELEASE_TAG`, `IMAGE_DIGEST`, and `PLATFORMS` alongside the publication inputs
+to fill that draft's release notes. Both commands modify GitHub releases;
+use `go test` for validation without publishing.
 
 Changelog integration tests use Git directly.
 CI runs all tests on every PR and default-branch push.

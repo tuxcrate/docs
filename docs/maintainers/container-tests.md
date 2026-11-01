@@ -9,6 +9,10 @@ stay out of image layers.
 
 For every active track, both PR and production jobs follow this order:
 
+Production jobs first reserve a draft release and its image revision, before the
+steps below. This supplies the build's exact `PACKAGE_VERSION`. PR jobs prepare
+a preview package version without creating releases or consuming revisions.
+
 1. Build every configured platform without layer cache and export one local OCI
    archive. BuildKit records provenance and SBOM attestations in that archive.
    This step does not push an image to a registry.
@@ -24,13 +28,14 @@ For every active track, both PR and production jobs follow this order:
    `skopeo copy --all --preserve-digests`. This preserves the multiarchitecture
    index, platform manifests, annotations, provenance, and SBOMs. There is no
    rebuild between testing and publication.
-6. Publish PR preview tags or continue production revision reservation, image
-   tagging, and GitHub release publication.
+6. Publish PR preview tags or finalize the production draft's notes with the
+   tested artifact metadata, then publish image tags and the GitHub release.
 
 An unsuccessful build or test never uploads image manifests or layers to GHCR.
 BuildKit's GitHub Actions cache may still be written; it is not a published
-container image. A later publication failure can leave an untagged registry
-artifact or draft release, as described in [Container releases](container-releases.md).
+container image. A failed production build or test retains its revision-reserving
+draft. A later publication failure can also leave an untagged registry artifact,
+as described in [Container releases](container-releases.md).
 This order applies to each track independently, so one failing track does not
 prevent another from completing.
 
@@ -57,6 +62,13 @@ bash tests/smoke.sh IMAGE APP_VERSION PLATFORM
 | `IMAGE` | Unique local Docker image reference loaded from the built archive; use it without pulling or rebuilding |
 | `APP_VERSION` | Exact installation pin from the track, including an APT package revision when applicable |
 | `PLATFORM` | Requested platform, such as `linux/amd64` or `linux/arm64` |
+
+The hook also inherits `PACKAGE_VERSION` from the workflow. When an application
+exposes packaging metadata, verify it matches this value, independently of
+`APP_VERSION`. This catches missing metadata, an incorrect revision, or a package
+author link that the application does not actually read. Sonarr, Radarr, and
+Prowlarr check their authenticated status APIs using the disposable instance's
+generated API key.
 
 The same script handles all tracks. Use the expected version argument instead
 of hard-coding a release. Helpers and fixtures may live elsewhere under `tests/`;
@@ -149,6 +161,13 @@ docker buildx build --pull --no-cache --platform linux/amd64 --load \
   --file Containerfile --tag tuxcrate-local:test .
 bash tests/smoke.sh tuxcrate-local:test "$APP_VERSION" linux/amd64
 ```
+
+For images that embed packaging metadata, optionally pass
+`--build-arg PACKAGE_VERSION="$PACKAGE_VERSION"` and set the same variable when
+running the hook. Use a clearly local identifier, such as `4.0.20.3014-local`,
+unless testing a specific revision value. Omitting the argument and environment
+variable uses the local fallback in the Sonarr, Radarr, and Prowlarr images and
+hooks. These commands do not reserve or publish a release.
 
 To reproduce the shared artifact path on Linux, install Go, Bash, Docker/Buildx,
 Skopeo, and QEMU/binfmt support for non-native execution. Build the shared Go
